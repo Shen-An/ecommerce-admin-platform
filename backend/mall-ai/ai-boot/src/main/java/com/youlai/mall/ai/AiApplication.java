@@ -11,7 +11,11 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  */
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableFeignClients
+@EnableFeignClients(basePackages = {
+        "com.youlai.mall.ai.client",
+        "com.youlai.mall.pms.api",
+        "com.youlai.mall.oms.api"
+})
 @MapperScan("com.youlai.mall.ai.mapper")
 public class AiApplication {
 

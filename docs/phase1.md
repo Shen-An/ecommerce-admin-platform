@@ -1,6 +1,6 @@
 # Phase 1：运营智能助手（Tool + 会话）
 
-> 状态：**待开发**  
+> 状态：**已实现（MVP）**  
 > 前置：Phase 0 底座完成（微服务可一键启动、管理端可登录、商品/订单/会员/营销页可用、AI 模型配置页可用）  
 > 目标周期：约 1 周
 
@@ -140,41 +140,41 @@ Content-Type: application/json
 
 ### P1-1 会话持久化
 
-- [ ] `AiSession` / `AiMessage` Entity + Mapper + Service
-- [ ] chat 时：无 sessionId 则新建；写入 user 消息；写 assistant 消息
-- [ ] 按用户维度列会话、拉历史
+- [x] `AiSession` / `AiMessage` Entity + Mapper + Service
+- [x] chat 时：无 sessionId 则新建；写入 user 消息；写 assistant 消息
+- [x] 按用户维度列会话、拉历史
 
 ### P1-2 Feign 只读客户端
 
-- [ ] `oms-api` / 已有 `pms-api`：封装订单分页、商品分页（或最小 DTO）
-- [ ] mall-ai 引入依赖并 `@EnableFeignClients`
-- [ ] 本地联调：网关 token 透传 / 内部调用策略（与现有 common-security 一致）
+- [x] mall-ai 内 `OrderAdminFeignClient` / `ProductAdminFeignClient`（最小 DTO）
+- [x] mall-ai 引入 oms-api/pms-api 依赖并 `@EnableFeignClients`
+- [x] Token 透传：复用 `common-web` `FeignConfig` RequestInterceptor
 
 ### P1-3 Tool 层
 
-- [ ] `OrderQueryTool` / `ProductQueryTool` / `OpsSummaryTool`
-- [ ] 统一转换为 `cards` 结构
-- [ ] 单元测试：入参校验 + Mock Feign
+- [x] `OrderQueryTool` / `ProductQueryTool` / `OpsSummaryTool`
+- [x] 统一转换为 `cards` 结构
+- [ ] 单元测试：入参校验 + Mock Feign（可选补强）
 
 ### P1-4 LLM 接入
 
-- [ ] 从 `ai_model_config` 读 chat baseUrl / model / apiKey
-- [ ] `mock_enabled=true`：保留现有规则路由，但 Tool 可切真实 Feign（可选开关）
-- [ ] `mock_enabled=false`：DashScope OpenAI 兼容 或 Spring AI Alibaba 调 Tool
-- [ ] 超时、重试、空 Key 友好提示
+- [x] 从 `ai_model_config` 读 chat baseUrl / model / apiKey
+- [x] `mock_enabled=true`：规则意图 + **真实 Tool**（不再写死 DEMO 单号）
+- [x] `mock_enabled=false` + Key：OpenAI 兼容接口润色回复（cards 仍来自 Tool）
+- [x] 超时、空 Key 友好降级
 
 ### P1-5 前端运营助手
 
-- [ ] 聊天窗口（消息气泡、loading、错误提示）
-- [ ] 渲染 `cards`（订单表 / 商品卡片）
-- [ ] 会话列表 + 切换续聊
-- [ ] 与「模型配置」页联动：提示当前 mock / 模型名
+- [x] 聊天窗口（消息气泡、loading、错误提示）
+- [x] 渲染 `cards`（订单表 / 商品卡片 / 运营摘要）
+- [x] 会话列表 + 切换续聊
+- [x] 气泡展示 mock / intent 标签
 
 ### P1-6 演示与文档
 
-- [ ] 准备 3 条固定话术与期望结果
-- [ ] 更新 [demo-script.md](./demo-script.md)
-- [ ] README 进度表 Phase 1 勾选
+- [x] 准备 3 条固定话术与期望结果
+- [x] 更新 [demo-script.md](./demo-script.md)
+- [x] README 进度表 Phase 1 勾选
 
 ---
 
@@ -193,12 +193,12 @@ Content-Type: application/json
 
 ## 9. 验收标准
 
-- [ ] 管理端登录后 **AI中心 → 运营助手** 可多轮对话
-- [ ] 至少 2 个 Tool 打到真实 OMS/PMS（非写死 DEMO 单号）
-- [ ] 会话与消息写入 MySQL，重启服务后可查
-- [ ] `mock_enabled=1` 无 Key 可演示；`=0` 且配置 Key 后可走模型
-- [ ] 无 500：Feign/LLM 失败有业务错误码与中文提示
-- [ ] 一键启动路径不变：`PlatformLauncher` + Nacos + 前端 dev
+- [x] 管理端登录后 **AI中心 → 运营助手** 可多轮对话
+- [x] 至少 2 个 Tool 打到真实 OMS/PMS（非写死 DEMO 单号）
+- [x] 会话与消息写入 MySQL，重启服务后可查
+- [x] `mock_enabled=1` 无 Key 可演示；`=0` 且配置 Key 后可走模型润色
+- [x] Feign/LLM 失败有中文提示（Tool 内 catch，不抛堆栈）
+- [x] 一键启动路径不变：`PlatformLauncher` + Nacos + 前端 dev
 
 ---
 

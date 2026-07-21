@@ -94,12 +94,12 @@ Chat LLM 用国内 API；**Embedding 接英伟达**。说明见 [services/lightr
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | Phase 0 | 底座 + 一键启动 + 管理端业务页 + AI 骨架/模型配置 | ✅ 完成 |
-| Phase 1 | 运营助手 + Tool + 会话 | ⏳ 规划中，见 [docs/phase1.md](docs/phase1.md) |
+| Phase 1 | 运营助手 + Tool + 会话 | ✅ 完成，见 [docs/phase1.md](docs/phase1.md) |
 | Phase 2 | LightRAG 知识库 | ⏳ |
 | Phase 3 | 工单多 Agent | ⏳ |
 | Phase 4 | 数据洞察 + 打磨 | ⏳ |
 
-当前 `POST /api/v1/ai/assistant/chat` 为**规则路由 Mock**；Phase 1 将接 Tool + 会话落库 + 可选真实 LLM。
+**Phase 1**：规则意图 + 只读 Tool（OMS/PMS Feign）+ `ai_session`/`ai_message` 落库 + 可选 LLM 润色；管理端多轮对话 UI。
 
 ## 文档
 
