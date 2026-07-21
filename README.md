@@ -116,6 +116,7 @@ Chat LLM 用国内 API；**Embedding 接英伟达**。说明见 [services/lightr
 | [docs/phase3.md](docs/phase3.md) | Phase 3 工单 Agent |
 | [docs/phase4.md](docs/phase4.md) | **Phase 4 数据洞察** |
 | [docs/demo-script.md](docs/demo-script.md) | 演示话术 |
+| [docs/demo-onepager.md](docs/demo-onepager.md) | **6 分钟演示一页纸** |
 
 ## 许可证
 

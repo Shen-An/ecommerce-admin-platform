@@ -12,6 +12,8 @@ import {
   uploadKnowledgeFile,
   deleteKnowledgeDoc,
   seedKnowledgeDocs,
+  reindexKnowledgeDocs,
+  refreshKnowledgeIndexStatus,
   queryKnowledge,
   type KnowledgeDoc,
   type KnowledgeQueryResult,
@@ -22,6 +24,8 @@ const status = ref<KnowledgeStatus | null>(null);
 const docs = ref<KnowledgeDoc[]>([]);
 const loadingDocs = ref(false);
 const seeding = ref(false);
+const reindexing = ref(false);
+const refreshingIndex = ref(false);
 
 const question = ref("7 天无理由退货怎么处理？");
 const mode = ref("mix");
@@ -88,6 +92,33 @@ function handleSeed() {
     })
     .finally(() => {
       seeding.value = false;
+    });
+}
+
+function handleReindex() {
+  reindexing.value = true;
+  reindexKnowledgeDocs()
+    .then(({ data }) => {
+      ElMessage.success(data?.message || "已同步");
+      refreshAll();
+    })
+    .catch((e: any) => {
+      ElMessage.error(e?.message || "同步失败：请确认 LightRAG 已启动");
+    })
+    .finally(() => {
+      reindexing.value = false;
+    });
+}
+
+function handleRefreshIndex() {
+  refreshingIndex.value = true;
+  refreshKnowledgeIndexStatus()
+    .then(({ data }) => {
+      ElMessage.success(data?.message || "已刷新");
+      refreshAll();
+    })
+    .finally(() => {
+      refreshingIndex.value = false;
     });
 }
 
@@ -203,20 +234,40 @@ function formatRefContent(ref: Record<string, any>) {
             <el-button size="small" type="success" :loading="seeding" @click="handleSeed">
               灌入演示语料
             </el-button>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="reindexing"
+              :disabled="status?.lightrag !== 'UP'"
+              @click="handleReindex"
+            >
+              同步到 LightRAG
+            </el-button>
+            <el-button
+              size="small"
+              :loading="refreshingIndex"
+              :disabled="status?.lightrag !== 'UP'"
+              @click="handleRefreshIndex"
+            >
+              刷新索引状态
+            </el-button>
           </div>
         </div>
       </template>
       <el-alert
         type="info"
         :closable="false"
-        title="Embedding 默认 nvidia/llama-nemotron-embed-1b-v2（模型配置页）。LightRAG 未启动时仍可本地关键词问答。"
+        title="真索引：启动 LightRAG 后点「同步到 LightRAG」→ 稍候「刷新索引状态」→ 问答 source=lightrag。未启动时走本地关键词降级。"
       />
       <div v-if="status" class="status-row">
         <el-tag :type="status.lightrag === 'UP' ? 'success' : 'warning'" size="small">
           LightRAG {{ status.lightrag || "UNKNOWN" }}
         </el-tag>
         <span class="ml-2 muted">{{ status.baseUrl }}</span>
-        <span class="ml-2 muted">本地文档 {{ status.localDocCount ?? 0 }} 篇</span>
+        <span class="ml-2 muted">文档 {{ status.localDocCount ?? 0 }}</span>
+        <el-tag size="small" type="info" class="ml-2">ready {{ status.readyCount ?? 0 }}</el-tag>
+        <el-tag size="small" type="warning" class="ml-2">indexing {{ status.indexingCount ?? 0 }}</el-tag>
+        <el-tag size="small" class="ml-2">local {{ status.localOnlyCount ?? 0 }}</el-tag>
         <div class="hint">{{ status.hint }}</div>
       </div>
     </el-card>

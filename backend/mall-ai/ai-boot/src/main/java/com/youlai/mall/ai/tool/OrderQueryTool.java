@@ -81,6 +81,44 @@ public class OrderQueryTool {
         return -1;
     }
 
+    /**
+     * 抽样订单支付金额合计（分）。pageSize 上限 50，用于白名单 GMV 近似，非全库。
+     */
+    public long samplePaymentAmountFen(Integer status, int pageSize) {
+        int size = Math.min(Math.max(pageSize, 1), 50);
+        try {
+            PageResult<OrderPageItemDTO> page = orderAdminFeignClient.getOrderPage(1, size, null, status);
+            List<OrderPageItemDTO> list = page != null && page.getData() != null ? page.getData().getList() : null;
+            if (list == null) {
+                return -1;
+            }
+            long sum = 0;
+            for (OrderPageItemDTO item : list) {
+                if (item.getPaymentAmount() != null) {
+                    sum += item.getPaymentAmount();
+                }
+            }
+            return sum;
+        } catch (Exception ex) {
+            log.warn("samplePaymentAmount status={} failed: {}", status, ex.getMessage());
+            return -1;
+        }
+    }
+
+    /** 抽样订单列表（只读）。 */
+    public List<OrderPageItemDTO> sampleOrders(Integer status, int pageSize) {
+        int size = Math.min(Math.max(pageSize, 1), 50);
+        try {
+            PageResult<OrderPageItemDTO> page = orderAdminFeignClient.getOrderPage(1, size, null, status);
+            if (page != null && page.getData() != null && page.getData().getList() != null) {
+                return page.getData().getList();
+            }
+        } catch (Exception ex) {
+            log.warn("sampleOrders failed: {}", ex.getMessage());
+        }
+        return List.of();
+    }
+
     private Integer resolveStatus(String message) {
         if (!StringUtils.hasText(message)) {
             return null;

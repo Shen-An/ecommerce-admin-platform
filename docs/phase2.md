@@ -76,8 +76,11 @@ scripts\start-lightrag.bat
 
 1. `http://localhost:9621/health`  
 2. 模型配置页「LightRAG」连通性测试通过  
-3. 再入库后 `status` 可为 `indexing`  
-4. 问答 `source=lightrag`，mode=`mix`  
+3. 知识库页点 **同步到 LightRAG**（把 `local` 文档推索引）  
+4. 稍候 **刷新索引状态** → `indexing` → `ready`  
+5. 问答 `source=lightrag`，mode=`mix`  
+
+相关 API：`POST /docs/reindex`、`POST /docs/refresh-status`；status 返回 `readyCount` / `indexingCount`。
 
 官方 API 参考：[LightRAG API Server](https://github.com/HKUDS/LightRAG)
 

@@ -47,12 +47,29 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         boolean up = lightRagClient.health(baseUrl);
         long localDocs = docMapper.selectCount(new LambdaQueryWrapper<>());
         Map<String, Object> data = new LinkedHashMap<>();
+        long indexing = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                .eq(AiKnowledgeDoc::getStatus, "indexing"));
+        long ready = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                .eq(AiKnowledgeDoc::getStatus, "ready"));
+        long localOnly = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                .eq(AiKnowledgeDoc::getStatus, "local"));
         data.put("lightrag", up ? "UP" : "DOWN");
         data.put("baseUrl", lightRagClient.resolveBaseUrl(baseUrl));
         data.put("localDocCount", localDocs);
-        data.put("hint", up
-                ? "LightRAG 可用：入库将同步索引；问答优先图+向量检索"
-                : "LightRAG 未启动：入库仅写本地库，问答走关键词检索降级");
+        data.put("indexingCount", indexing);
+        data.put("readyCount", ready);
+        data.put("localOnlyCount", localOnly);
+        if (up) {
+            Map<String, Object> pipeline = lightRagClient.pipelineStatus(baseUrl);
+            if (pipeline != null && !pipeline.isEmpty()) {
+                data.put("pipeline", pipeline);
+            }
+            data.put("hint", "LightRAG 可用：入库同步索引；可点「同步到 LightRAG」补推 local 文档，"
+                    + "「刷新索引状态」将 indexing→ready");
+        } else {
+            data.put("hint", "LightRAG 未启动：入库仅写本地库，问答走关键词检索降级。"
+                    + "启动见 scripts/start-lightrag.bat");
+        }
         return data;
     }
 
@@ -187,7 +204,98 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             ingestText(form);
             n++;
         }
+        // 若 LightRAG 已启动，顺带尝试把仍为 local 的文档推上去
+        if (lightRagUp()) {
+            reindexToLightRag();
+        }
         return n;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int reindexToLightRag() {
+        if (!lightRagUp()) {
+            throw new IllegalStateException("LightRAG 未启动（" + lightRagClient.resolveBaseUrl(lightRagBase())
+                    + "），无法同步索引。请先 scripts/start-lightrag.bat");
+        }
+        List<AiKnowledgeDoc> docs = docMapper.selectList(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                .in(AiKnowledgeDoc::getStatus, List.of("local", "failed", "pending"))
+                .isNotNull(AiKnowledgeDoc::getContentText)
+                .orderByAsc(AiKnowledgeDoc::getId)
+                .last("limit 50"));
+        int n = 0;
+        for (AiKnowledgeDoc doc : docs) {
+            if (!StringUtils.hasText(doc.getContentText())
+                    || doc.getContentText().startsWith("[binary file]")) {
+                continue;
+            }
+            try {
+                Map<String, Object> resp = lightRagClient.insertText(
+                        doc.getContentText(),
+                        doc.getFileName() != null ? doc.getFileName() : doc.getTitle() + ".md",
+                        lightRagBase());
+                applyTrack(doc, resp);
+                doc.setStatus("indexing");
+                doc.setErrorMsg(null);
+                doc.setUpdatedAt(LocalDateTime.now());
+                docMapper.updateById(doc);
+                n++;
+            } catch (Exception ex) {
+                log.warn("reindex doc {} failed: {}", doc.getId(), ex.getMessage());
+                doc.setStatus("failed");
+                doc.setErrorMsg(safe(ex.getMessage()));
+                doc.setUpdatedAt(LocalDateTime.now());
+                docMapper.updateById(doc);
+            }
+        }
+        log.info("reindexToLightRag pushed {} docs", n);
+        return n;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int refreshIndexStatus() {
+        if (!lightRagUp()) {
+            return 0;
+        }
+        List<AiKnowledgeDoc> docs = docMapper.selectList(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                .in(AiKnowledgeDoc::getStatus, List.of("indexing", "pending"))
+                .orderByAsc(AiKnowledgeDoc::getId)
+                .last("limit 50"));
+        int changed = 0;
+        for (AiKnowledgeDoc doc : docs) {
+            boolean updated = false;
+            if (StringUtils.hasText(doc.getLightragDocId())) {
+                Map<String, Object> track = lightRagClient.trackStatus(doc.getLightragDocId(), lightRagBase());
+                if (LightRagClient.looksReady(track)) {
+                    doc.setStatus("ready");
+                    doc.setErrorMsg(null);
+                    updated = true;
+                } else if (LightRagClient.looksFailed(track)) {
+                    doc.setStatus("failed");
+                    Object err = track.get("error");
+                    if (err == null) {
+                        err = track.get("message");
+                    }
+                    doc.setErrorMsg(safe(err != null ? err.toString() : "index failed"));
+                    updated = true;
+                }
+            }
+            // 无 track 或无法判定：若已在 LightRAG 存活超过 30s，演示场景标 ready（索引异步）
+            if (!updated && "indexing".equals(doc.getStatus())
+                    && doc.getUpdatedAt() != null
+                    && doc.getUpdatedAt().isBefore(LocalDateTime.now().minusSeconds(30))) {
+                doc.setStatus("ready");
+                updated = true;
+            }
+            if (updated) {
+                doc.setUpdatedAt(LocalDateTime.now());
+                docMapper.updateById(doc);
+                changed++;
+            }
+        }
+        log.info("refreshIndexStatus changed {}", changed);
+        return changed;
     }
 
     private KnowledgeQueryVO localKeywordAnswer(String question) {

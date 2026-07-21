@@ -34,8 +34,9 @@ Swagger：`http://localhost:9621/docs`
 
 1. `/health` 可用  
 2. 管理端知识库「灌入演示语料」或上传 `demo-docs/*.md`  
-3. 提问「7 天无理由退货怎么处理？」返回非空答案  
-4. LightRAG UP 时 `source=lightrag`；DOWN 时 `source=local`
+3. LightRAG UP 时点 **同步到 LightRAG**（推 local 文档建真索引），再 **刷新索引状态**  
+4. 提问「7 天无理由退货怎么处理？」→ `source=lightrag`  
+5. LightRAG DOWN 时仍可 `source=local` 关键词降级
 
 ## 目录
 

@@ -17,6 +17,12 @@ public enum InsightTemplate {
     /** 取消/售后占比（近似退货率） */
     REFUND_RATE("refund_rate", "取消与售后占比"),
 
+    /** 品类销量聚合 */
+    CATEGORY_SALES("category_sales", "品类销量分布"),
+
+    /** GMV 抽样快照（首页订单金额） */
+    GMV_SNAPSHOT("gmv_snapshot", "GMV 抽样快照"),
+
     /** 综合运营看板 */
     OPS_DASHBOARD("ops_dashboard", "运营综合看板");
 

@@ -57,6 +57,13 @@
 
 1. 架构图：Java 微服务 + Python LightRAG + 多 Agent
 2. 工程点：鉴权、会话审计、配置外置、降级策略
+3. 一页纸速查：[demo-onepager.md](demo-onepager.md)
+
+## Phase 真索引（可选加时 30s）
+
+1. `scripts\start-lightrag.bat` + 填 `.env` Key  
+2. 知识库 → **同步到 LightRAG** → **刷新索引状态**  
+3. 再问「7 天无理由」→ `source=lightrag`
 
 ## Phase1 验收话术速查
 
@@ -85,4 +92,10 @@
 - [x] 灌入演示语料
 - [x] 本地降级问答可用
 - [x] 文档列表 / 删除
-- [ ] （可选）LightRAG :9621 真实索引
+- [x] 同步到 LightRAG + 刷新索引状态 API/UI
+- [ ] （环境）本机填 Key 后 :9621 真索引演示
+
+## Phase3 / 4 速查
+
+- 工单：投诉+起诉 → escalated；人工接管
+- 洞察：销量 Top5 / 品类 / GMV 抽样 / 状态分布；whitelist

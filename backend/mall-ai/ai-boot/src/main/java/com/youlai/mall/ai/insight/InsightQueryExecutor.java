@@ -8,6 +8,7 @@ import com.youlai.mall.ai.tool.ProductQueryTool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,6 +39,8 @@ public class InsightQueryExecutor {
             case SALES_TOPN -> salesTopN(topN);
             case LOW_STOCK -> lowStock(threshold, topN);
             case REFUND_RATE -> refundRate();
+            case CATEGORY_SALES -> categorySales(topN);
+            case GMV_SNAPSHOT -> gmvSnapshot();
             case OPS_DASHBOARD -> opsDashboard(threshold);
         };
     }
@@ -210,12 +213,122 @@ public class InsightQueryExecutor {
         ));
     }
 
+    private Map<String, Object> categorySales(int topN) {
+        List<SpuPageItemDTO> list = fetchSpus(40);
+        Map<String, Integer> catSales = new LinkedHashMap<>();
+        for (SpuPageItemDTO s : list) {
+            String cat = StringUtils.hasText(s.getCategoryName()) ? s.getCategoryName() : "未分类";
+            int sale = s.getSales() == null ? 0 : s.getSales();
+            catSales.merge(cat, sale, Integer::sum);
+        }
+        List<Map.Entry<String, Integer>> sorted = catSales.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(topN)
+                .collect(Collectors.toList());
+
+        List<String> names = new ArrayList<>();
+        List<Integer> values = new ArrayList<>();
+        List<Map<String, Object>> pieData = new ArrayList<>();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map.Entry<String, Integer> e : sorted) {
+            names.add(e.getKey());
+            values.add(e.getValue());
+            pieData.add(Map.of("name", e.getKey(), "value", e.getValue()));
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("category", e.getKey());
+            row.put("sales", e.getValue());
+            rows.add(row);
+        }
+
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("tooltip", Map.of("trigger", "item"));
+        option.put("legend", Map.of("orient", "vertical", "left", "left"));
+        option.put("series", List.of(Map.of(
+                "name", "品类销量",
+                "type", "pie",
+                "radius", new String[]{"35%", "60%"},
+                "data", pieData
+        )));
+
+        String top = sorted.isEmpty() ? "无" : sorted.get(0).getKey();
+        String narrative = sorted.isEmpty()
+                ? "暂无品类销量数据。"
+                : String.format("按 PMS 商品销量字段聚合，品类 Top%d 首位「%s」（%d）。抽样 SPU=%d，非全库 SQL。",
+                topN, top, sorted.get(0).getValue(), list.size());
+
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("rows", rows);
+        metrics.put("sampleSpu", list.size());
+        metrics.put("categories", names);
+        return result("pie", option, narrative, metrics);
+    }
+
+    private Map<String, Object> gmvSnapshot() {
+        // 抽样各有效状态首页订单金额（分）
+        long paidFen = Math.max(orderQueryTool.samplePaymentAmountFen(1, 30), 0);
+        long shippedFen = Math.max(orderQueryTool.samplePaymentAmountFen(2, 30), 0);
+        long completeFen = Math.max(orderQueryTool.samplePaymentAmountFen(3, 30), 0);
+        long sampleFen = paidFen + shippedFen + completeFen;
+        double sampleYuan = sampleFen / 100.0;
+
+        long paidCnt = safe(orderQueryTool.countByStatus(1));
+        long shippedCnt = safe(orderQueryTool.countByStatus(2));
+        long completeCnt = safe(orderQueryTool.countByStatus(3));
+        long activeCnt = paidCnt + shippedCnt + completeCnt;
+
+        // 用抽样均值外推粗估（演示用）
+        int sampleOrders = 0;
+        sampleOrders += orderQueryTool.sampleOrders(1, 30).size();
+        sampleOrders += orderQueryTool.sampleOrders(2, 30).size();
+        sampleOrders += orderQueryTool.sampleOrders(3, 30).size();
+        double avgOrderYuan = sampleOrders > 0 ? sampleYuan / sampleOrders : 0;
+        double estGmvYuan = avgOrderYuan * activeCnt;
+
+        List<String> cats = List.of("待发货抽样", "已发货抽样", "已完成抽样");
+        List<Double> vals = List.of(paidFen / 100.0, shippedFen / 100.0, completeFen / 100.0);
+        Map<String, Object> option = new LinkedHashMap<>();
+        option.put("tooltip", Map.of("trigger", "axis"));
+        option.put("xAxis", Map.of("type", "category", "data", cats));
+        option.put("yAxis", Map.of("type", "value", "name", "元"));
+        option.put("series", List.of(Map.of(
+                "name", "抽样支付额",
+                "type", "bar",
+                "data", vals,
+                "itemStyle", Map.of("color", "#F56C6C")
+        )));
+
+        String narrative = String.format(
+                "GMV 抽样快照：首页各状态合计抽样支付额约 ¥%.2f（%d 笔样本）。有效订单约 %d 笔，按样本客单价 ¥%.2f 粗估全量 ≈ ¥%.2f。"
+                        + "仅 Feign 分页抽样，禁止任意 SQL。",
+                sampleYuan, sampleOrders, activeCnt, avgOrderYuan, estGmvYuan);
+
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("samplePaymentYuan", Math.round(sampleYuan * 100) / 100.0);
+        metrics.put("sampleOrderCount", sampleOrders);
+        metrics.put("activeOrderCount", activeCnt);
+        metrics.put("avgOrderYuan", Math.round(avgOrderYuan * 100) / 100.0);
+        metrics.put("estimatedGmvYuan", Math.round(estGmvYuan * 100) / 100.0);
+        return result("bar", option, narrative, metrics);
+    }
+
     private Map<String, Object> opsDashboard(int threshold) {
         Map<String, Object> status = orderStatusDist();
         int low = productQueryTool.countLowStock(threshold);
         @SuppressWarnings("unchecked")
         Map<String, Object> metrics = new LinkedHashMap<>((Map<String, Object>) status.get("metrics"));
         metrics.put("lowStock", low);
+
+        // 附加 GMV 抽样与销量榜首
+        long completeFen = Math.max(orderQueryTool.samplePaymentAmountFen(3, 20), 0);
+        metrics.put("completeSampleYuan", completeFen / 100.0);
+        List<SpuPageItemDTO> top = fetchSpus(10).stream()
+                .sorted(Comparator.comparingInt((SpuPageItemDTO s) -> s.getSales() == null ? 0 : s.getSales()).reversed())
+                .limit(1)
+                .collect(Collectors.toList());
+        if (!top.isEmpty()) {
+            metrics.put("topSpu", top.get(0).getName());
+            metrics.put("topSales", top.get(0).getSales());
+        }
 
         List<String> cats = List.of("待付款", "待发货", "已发货", "已完成", "已取消", "售后中", "低库存SPU");
         List<Object> vals = List.of(
@@ -229,7 +342,14 @@ public class InsightQueryExecutor {
         option.put("yAxis", Map.of("type", "value"));
         option.put("series", List.of(Map.of("type", "bar", "data", vals, "itemStyle", Map.of("color", "#67C23A"))));
 
-        String narrative = status.get("narrative") + " 低库存 SPU 抽样：" + (low >= 0 ? low : "服务不可用") + "。";
+        String extra = "";
+        if (metrics.get("topSpu") != null) {
+            extra = " 热销榜首「" + metrics.get("topSpu") + "」销量 " + metrics.get("topSales") + "。";
+        }
+        if (metrics.get("completeSampleYuan") != null) {
+            extra += " 已完成订单抽样支付额约 ¥" + metrics.get("completeSampleYuan") + "。";
+        }
+        String narrative = status.get("narrative") + " 低库存 SPU 抽样：" + (low >= 0 ? low : "服务不可用") + "。" + extra;
         return result("bar", option, narrative, metrics);
     }
 

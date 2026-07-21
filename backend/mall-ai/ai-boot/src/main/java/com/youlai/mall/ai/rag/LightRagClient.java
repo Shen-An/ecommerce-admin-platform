@@ -169,6 +169,114 @@ public class LightRagClient {
         }
     }
 
+    /**
+     * 查询文档处理流水线状态（版本差异大，失败返回 empty）。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> pipelineStatus(String baseUrlOverride) {
+        String base = resolveBaseUrl(baseUrlOverride);
+        try {
+            return webClientBuilder.build()
+                    .get()
+                    .uri(base + "/documents/pipeline_status")
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block(Duration.ofMillis(Math.min(properties.getTimeoutMs(), 8000)));
+        } catch (Exception ex) {
+            log.debug("LightRAG pipeline_status failed: {}", ex.getMessage());
+            try {
+                return webClientBuilder.build()
+                        .get()
+                        .uri(base + "/documents/status")
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block(Duration.ofMillis(5000));
+            } catch (Exception ex2) {
+                return Collections.emptyMap();
+            }
+        }
+    }
+
+    /**
+     * 按 track_id 查处理状态（兼容多种路径）。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> trackStatus(String trackId, String baseUrlOverride) {
+        if (!StringUtils.hasText(trackId)) {
+            return Collections.emptyMap();
+        }
+        String base = resolveBaseUrl(baseUrlOverride);
+        String[] paths = {
+                "/documents/track_status/" + trackId,
+                "/documents/status/" + trackId,
+                "/documents/" + trackId
+        };
+        for (String path : paths) {
+            try {
+                Map<String, Object> resp = webClientBuilder.build()
+                        .get()
+                        .uri(base + path)
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block(Duration.ofMillis(5000));
+                if (resp != null && !resp.isEmpty()) {
+                    return resp;
+                }
+            } catch (Exception ignored) {
+                // try next
+            }
+        }
+        return Collections.emptyMap();
+    }
+
+    /** 从 track/list 响应推断是否已完成索引。 */
+    public static boolean looksReady(Map<String, Object> resp) {
+        if (resp == null || resp.isEmpty()) {
+            return false;
+        }
+        Object status = resp.get("status");
+        if (status == null) {
+            status = resp.get("state");
+        }
+        if (status == null) {
+            status = resp.get("doc_status");
+        }
+        if (status != null) {
+            String s = status.toString().toLowerCase();
+            if (s.contains("fail") || s.contains("error")) {
+                return false;
+            }
+            if (s.contains("process") || s.contains("pending") || s.contains("queue")) {
+                return false;
+            }
+            if (s.contains("done") || s.contains("ready") || s.contains("complete")
+                    || s.contains("success") || s.contains("finished") || s.contains("processed")) {
+                return true;
+            }
+        }
+        // 部分版本返回 message 含 success
+        Object msg = resp.get("message");
+        if (msg != null && msg.toString().toLowerCase().contains("success")) {
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean looksFailed(Map<String, Object> resp) {
+        if (resp == null) {
+            return false;
+        }
+        Object status = resp.get("status");
+        if (status == null) {
+            status = resp.get("state");
+        }
+        if (status != null) {
+            String s = status.toString().toLowerCase();
+            return s.contains("fail") || s.contains("error");
+        }
+        return false;
+    }
+
     public static String extractAnswer(Map<String, Object> resp) {
         if (resp == null) {
             return "";

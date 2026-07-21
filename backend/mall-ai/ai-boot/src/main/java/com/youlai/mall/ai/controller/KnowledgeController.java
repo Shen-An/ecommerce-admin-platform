@@ -80,4 +80,24 @@ public class KnowledgeController {
         data.put("message", n == 0 ? "演示语料已存在" : "已灌入 " + n + " 篇演示文档");
         return Result.success(data);
     }
+
+    @Operation(summary = "将本地 local/failed 文档同步推送到 LightRAG 建索引")
+    @PostMapping("/docs/reindex")
+    public Result<Map<String, Object>> reindex() {
+        int n = knowledgeService.reindexToLightRag();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("pushed", n);
+        data.put("message", n == 0 ? "没有需要同步的本地文档" : "已推送 " + n + " 篇到 LightRAG（indexing）");
+        return Result.success(data);
+    }
+
+    @Operation(summary = "刷新 indexing 文档状态（探测 ready/failed）")
+    @PostMapping("/docs/refresh-status")
+    public Result<Map<String, Object>> refreshStatus() {
+        int n = knowledgeService.refreshIndexStatus();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("changed", n);
+        data.put("message", n == 0 ? "无状态变更" : "已更新 " + n + " 篇文档状态");
+        return Result.success(data);
+    }
 }

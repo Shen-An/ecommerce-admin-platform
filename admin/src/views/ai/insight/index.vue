@@ -26,6 +26,8 @@ let chart: echarts.ECharts | null = null;
 
 const quickQuestions = [
   "近 7 天商品销量 Top5",
+  "品类销量分布",
+  "GMV 成交额快照",
   "订单状态分布怎么样",
   "库存预警有哪些商品",
   "取消和售后占比如何",

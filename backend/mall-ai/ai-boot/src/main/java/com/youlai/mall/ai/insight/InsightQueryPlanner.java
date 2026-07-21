@@ -25,57 +25,39 @@ public class InsightQueryPlanner {
         params.put("threshold", 10);
 
         if (containsAny(q, "库存", "缺货", "预警", "补货", "stock")) {
-            return InsightPlan.builder()
-                    .template(InsightTemplate.LOW_STOCK)
-                    .templateCode(InsightTemplate.LOW_STOCK.getCode())
-                    .templateLabel(InsightTemplate.LOW_STOCK.getLabel())
-                    .params(params)
-                    .reason("命中库存/预警关键词")
-                    .build();
+            return of(InsightTemplate.LOW_STOCK, params, "命中库存/预警关键词");
         }
         if (containsAny(q, "退货", "退款率", "取消率", "售后率", "退单")) {
-            return InsightPlan.builder()
-                    .template(InsightTemplate.REFUND_RATE)
-                    .templateCode(InsightTemplate.REFUND_RATE.getCode())
-                    .templateLabel(InsightTemplate.REFUND_RATE.getLabel())
-                    .params(params)
-                    .reason("命中退货/取消/售后占比")
-                    .build();
+            return of(InsightTemplate.REFUND_RATE, params, "命中退货/取消/售后占比");
         }
-        if (containsAny(q, "销量", "top", "畅销", "排行", "品类", "热销", "卖得")) {
-            return InsightPlan.builder()
-                    .template(InsightTemplate.SALES_TOPN)
-                    .templateCode(InsightTemplate.SALES_TOPN.getCode())
-                    .templateLabel(InsightTemplate.SALES_TOPN.getLabel())
-                    .params(params)
-                    .reason("命中销量/TopN/排行")
-                    .build();
+        if (containsAny(q, "gmv", "成交额", "销售额", "流水", "支付金额", "营收")) {
+            return of(InsightTemplate.GMV_SNAPSHOT, params, "命中 GMV/成交额");
+        }
+        if (containsAny(q, "品类", "分类", "类目") && containsAny(q, "销量", "分布", "排行", "top", "占比")) {
+            return of(InsightTemplate.CATEGORY_SALES, params, "命中品类销量");
+        }
+        if (containsAny(q, "品类分布", "分类销量", "类目销量")) {
+            return of(InsightTemplate.CATEGORY_SALES, params, "命中品类分布");
+        }
+        if (containsAny(q, "销量", "top", "畅销", "排行", "热销", "卖得")) {
+            return of(InsightTemplate.SALES_TOPN, params, "命中销量/TopN/排行");
         }
         if (containsAny(q, "状态分布", "订单分布", "待发货", "待付款", "订单状态", "漏斗")) {
-            return InsightPlan.builder()
-                    .template(InsightTemplate.ORDER_STATUS_DIST)
-                    .templateCode(InsightTemplate.ORDER_STATUS_DIST.getCode())
-                    .templateLabel(InsightTemplate.ORDER_STATUS_DIST.getLabel())
-                    .params(params)
-                    .reason("命中订单状态分布")
-                    .build();
+            return of(InsightTemplate.ORDER_STATUS_DIST, params, "命中订单状态分布");
         }
         if (containsAny(q, "看板", "综合", "运营", "概况", "dashboard", "怎么样")) {
-            return InsightPlan.builder()
-                    .template(InsightTemplate.OPS_DASHBOARD)
-                    .templateCode(InsightTemplate.OPS_DASHBOARD.getCode())
-                    .templateLabel(InsightTemplate.OPS_DASHBOARD.getLabel())
-                    .params(params)
-                    .reason("命中综合运营")
-                    .build();
+            return of(InsightTemplate.OPS_DASHBOARD, params, "命中综合运营");
         }
-        // 默认：销量 TopN（演示常用）
+        return of(InsightTemplate.SALES_TOPN, params, "未精确匹配，默认销量 TopN（白名单）");
+    }
+
+    private static InsightPlan of(InsightTemplate t, Map<String, Object> params, String reason) {
         return InsightPlan.builder()
-                .template(InsightTemplate.SALES_TOPN)
-                .templateCode(InsightTemplate.SALES_TOPN.getCode())
-                .templateLabel(InsightTemplate.SALES_TOPN.getLabel())
+                .template(t)
+                .templateCode(t.getCode())
+                .templateLabel(t.getLabel())
                 .params(params)
-                .reason("未精确匹配，默认销量 TopN（白名单）")
+                .reason(reason)
                 .build();
     }
 

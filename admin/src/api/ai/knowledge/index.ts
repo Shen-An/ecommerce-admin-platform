@@ -28,6 +28,10 @@ export interface KnowledgeStatus {
   lightrag?: string;
   baseUrl?: string;
   localDocCount?: number;
+  indexingCount?: number;
+  readyCount?: number;
+  localOnlyCount?: number;
+  pipeline?: Record<string, unknown>;
   hint?: string;
 }
 
@@ -76,6 +80,23 @@ export function deleteKnowledgeDoc(id: number) {
 export function seedKnowledgeDocs(): AxiosPromise<{ created: number; message: string }> {
   return request({
     url: "/mall-ai/api/v1/ai/knowledge/docs/seed",
+    method: "post",
+  });
+}
+
+export function reindexKnowledgeDocs(): AxiosPromise<{ pushed: number; message: string }> {
+  return request({
+    url: "/mall-ai/api/v1/ai/knowledge/docs/reindex",
+    method: "post",
+  });
+}
+
+export function refreshKnowledgeIndexStatus(): AxiosPromise<{
+  changed: number;
+  message: string;
+}> {
+  return request({
+    url: "/mall-ai/api/v1/ai/knowledge/docs/refresh-status",
     method: "post",
   });
 }

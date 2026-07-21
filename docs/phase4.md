@@ -14,7 +14,9 @@
 | `order_status_dist` | 订单状态分布 | OMS 分状态 total |
 | `low_stock` | 库存预警 | PMS SKU stock 抽样 |
 | `refund_rate` | 取消+售后占比 | OMS 状态聚合（近似） |
-| `ops_dashboard` | 运营综合看板 | 订单分布 + 低库存 |
+| `category_sales` | 品类销量分布 | PMS SPU 按 categoryName 聚合销量 |
+| `gmv_snapshot` | GMV 抽样快照 | OMS 首页订单 paymentAmount 抽样+外推 |
+| `ops_dashboard` | 运营综合看板 | 订单分布 + 低库存 + 热销/抽样 GMV |
 
 ## API
 
