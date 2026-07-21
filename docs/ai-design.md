@@ -10,8 +10,8 @@
 2. 调用 Tools：`queryOrders` / `queryProducts` / `queryInventory` / `summarizeOpsDaily`
 3. 汇总为文本 + 结构化 cards
 
-**当前骨架**：`AssistantServiceImpl` 规则意图 + Mock cards。  
-**下一步**：接入 Spring AI Alibaba DashScope，Tool 调 OMS/PMS Feign。
+**当前**：Phase1 已实现规则意图 + OMS/PMS 只读 Tool + 会话落库 + 可选 LLM 润色。  
+详见 [phase1.md](./phase1.md)。
 
 ## 场景二：LightRAG 知识库
 
@@ -22,7 +22,9 @@
 提问 → mall-ai → LightRAG mode=mix → 答案 + 引用
 ```
 
-**Java 侧**：`LightRagClient`（WebClient）。  
+**当前**：Phase2 已实现文档入库、`LightRagClient` 转发、本地关键词降级。  
+详见 [phase2.md](./phase2.md)。
+
 **演示语料**：售后政策、运营 SOP、客服话术。
 
 ## 场景三：客服/工单多 Agent

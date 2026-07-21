@@ -1,105 +1,452 @@
-<!-- AI 知识库（占位，后续接 LightRAG） -->
+<!-- AI 知识库：文档入库 + LightRAG/本地问答 -->
 <script setup lang="ts">
 defineOptions({
   name: "AiKnowledge",
   inheritAttrs: false,
 });
 
-import request from "@/utils/request";
+import {
+  getKnowledgeStatus,
+  listKnowledgeDocs,
+  ingestKnowledgeText,
+  uploadKnowledgeFile,
+  deleteKnowledgeDoc,
+  seedKnowledgeDocs,
+  queryKnowledge,
+  type KnowledgeDoc,
+  type KnowledgeQueryResult,
+  type KnowledgeStatus,
+} from "@/api/ai/knowledge";
 
-const query = ref("退货退款政策是什么？");
-const loading = ref(false);
-const result = ref("");
-const health = ref<any>(null);
+const status = ref<KnowledgeStatus | null>(null);
+const docs = ref<KnowledgeDoc[]>([]);
+const loadingDocs = ref(false);
+const seeding = ref(false);
 
-function handleQuery() {
-  loading.value = true;
-  request({
-    url: "/mall-ai/api/v1/ai/knowledge/query",
-    method: "post",
-    data: { question: query.value },
-  })
+const question = ref("7 天无理由退货怎么处理？");
+const mode = ref("mix");
+const querying = ref(false);
+const answer = ref<KnowledgeQueryResult | null>(null);
+
+const textDialog = ref(false);
+const textForm = reactive({
+  title: "",
+  domain: "售后",
+  content: "",
+});
+const savingText = ref(false);
+
+const uploadDialog = ref(false);
+const uploadDomain = ref("general");
+const uploadTitle = ref("");
+const fileList = ref<any[]>([]);
+const uploading = ref(false);
+
+const quickQuestions = [
+  "7 天无理由退货怎么处理？",
+  "质量问题多久可以退换？",
+  "每日开店要检查哪些事项？",
+  "物流停滞超 72 小时怎么办？",
+];
+
+onMounted(() => {
+  refreshAll();
+});
+
+function refreshAll() {
+  loadStatus();
+  loadDocs();
+}
+
+function loadStatus() {
+  getKnowledgeStatus()
     .then(({ data }) => {
-      result.value =
-        typeof data === "string" ? data : JSON.stringify(data, null, 2);
+      status.value = data;
     })
     .catch(() => {
-      result.value = "";
+      status.value = { lightrag: "DOWN", hint: "状态接口不可用" };
+    });
+}
+
+function loadDocs() {
+  loadingDocs.value = true;
+  listKnowledgeDocs()
+    .then(({ data }) => {
+      docs.value = data || [];
     })
     .finally(() => {
-      loading.value = false;
+      loadingDocs.value = false;
     });
 }
 
-function loadHealth() {
-  request({
-    url: "/mall-ai/api/v1/ai/health",
-    method: "get",
-  })
+function handleSeed() {
+  seeding.value = true;
+  seedKnowledgeDocs()
     .then(({ data }) => {
-      health.value = data;
+      ElMessage.success(data?.message || "完成");
+      refreshAll();
     })
-    .catch(() => {
-      health.value = { status: "unavailable" };
+    .finally(() => {
+      seeding.value = false;
     });
 }
 
-onMounted(loadHealth);
+function openTextDialog() {
+  textForm.title = "";
+  textForm.domain = "售后";
+  textForm.content = "";
+  textDialog.value = true;
+}
+
+function submitText() {
+  if (!textForm.title.trim() || !textForm.content.trim()) {
+    ElMessage.warning("标题与正文不能为空");
+    return;
+  }
+  savingText.value = true;
+  ingestKnowledgeText({ ...textForm })
+    .then(() => {
+      ElMessage.success("已入库");
+      textDialog.value = false;
+      refreshAll();
+    })
+    .finally(() => {
+      savingText.value = false;
+    });
+}
+
+function openUploadDialog() {
+  uploadDomain.value = "general";
+  uploadTitle.value = "";
+  fileList.value = [];
+  uploadDialog.value = true;
+}
+
+function handleUpload() {
+  const raw = fileList.value[0]?.raw;
+  if (!raw) {
+    ElMessage.warning("请选择文件");
+    return;
+  }
+  const fd = new FormData();
+  fd.append("file", raw);
+  fd.append("domain", uploadDomain.value || "general");
+  if (uploadTitle.value) {
+    fd.append("title", uploadTitle.value);
+  }
+  uploading.value = true;
+  uploadKnowledgeFile(fd)
+    .then(() => {
+      ElMessage.success("上传成功");
+      uploadDialog.value = false;
+      refreshAll();
+    })
+    .finally(() => {
+      uploading.value = false;
+    });
+}
+
+function handleDelete(row: KnowledgeDoc) {
+  ElMessageBox.confirm(`删除文档「${row.title}」？`, "提示", { type: "warning" })
+    .then(() => deleteKnowledgeDoc(row.id))
+    .then(() => {
+      ElMessage.success("已删除");
+      refreshAll();
+    })
+    .catch(() => undefined);
+}
+
+function applyQuestion(q: string) {
+  question.value = q;
+  handleQuery();
+}
+
+function handleQuery() {
+  if (!question.value.trim()) {
+    ElMessage.warning("请输入问题");
+    return;
+  }
+  querying.value = true;
+  answer.value = null;
+  queryKnowledge({ question: question.value, mode: mode.value })
+    .then(({ data }) => {
+      answer.value = data;
+    })
+    .finally(() => {
+      querying.value = false;
+    });
+}
+
+function statusTagType(s?: string) {
+  if (s === "ready" || s === "indexing") return "success";
+  if (s === "local") return "warning";
+  if (s === "failed") return "danger";
+  return "info";
+}
+
+function formatRefContent(ref: Record<string, any>) {
+  const c = ref.content;
+  if (Array.isArray(c)) return c.join("\n");
+  if (typeof c === "string") return c;
+  return "";
+}
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="knowledge-page">
     <el-card shadow="never" class="mb-3">
       <template #header>
-        <span>知识库 / LightRAG</span>
+        <div class="card-header">
+          <span>知识库 / LightRAG</span>
+          <div>
+            <el-button size="small" @click="refreshAll">刷新状态</el-button>
+            <el-button size="small" type="success" :loading="seeding" @click="handleSeed">
+              灌入演示语料
+            </el-button>
+          </div>
+        </div>
       </template>
       <el-alert
         type="info"
         :closable="false"
-        title="Embedding 使用「模型配置」中的 nvidia/llama-nemotron-embed-1b-v2。请先配置 NVIDIA API Key，再启动 LightRAG 服务。"
+        title="Embedding 默认 nvidia/llama-nemotron-embed-1b-v2（模型配置页）。LightRAG 未启动时仍可本地关键词问答。"
       />
-      <div v-if="health" class="health">
-        服务健康：
-        <el-tag size="small">{{ health.status || "ok" }}</el-tag>
-        <span v-if="health.service" class="ml-2">{{ health.service }}</span>
+      <div v-if="status" class="status-row">
+        <el-tag :type="status.lightrag === 'UP' ? 'success' : 'warning'" size="small">
+          LightRAG {{ status.lightrag || "UNKNOWN" }}
+        </el-tag>
+        <span class="ml-2 muted">{{ status.baseUrl }}</span>
+        <span class="ml-2 muted">本地文档 {{ status.localDocCount ?? 0 }} 篇</span>
+        <div class="hint">{{ status.hint }}</div>
       </div>
     </el-card>
 
-    <el-card shadow="never">
-      <el-input
-        v-model="query"
-        type="textarea"
-        :rows="3"
-        placeholder="输入知识库问题"
-      />
-      <div class="actions">
-        <el-button type="primary" :loading="loading" @click="handleQuery">
-          检索问答
-        </el-button>
-      </div>
-      <pre v-if="result" class="result">{{ result }}</pre>
-    </el-card>
+    <div class="grid">
+      <!-- 文档列表 -->
+      <el-card shadow="never" class="docs-card">
+        <template #header>
+          <div class="card-header">
+            <span>文档库</span>
+            <div>
+              <el-button size="small" @click="openTextDialog">文本入库</el-button>
+              <el-button size="small" type="primary" @click="openUploadDialog">上传文件</el-button>
+            </div>
+          </div>
+        </template>
+        <el-table v-loading="loadingDocs" :data="docs" size="small" height="420">
+          <el-table-column prop="title" label="标题" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="domain" label="领域" width="80" />
+          <el-table-column prop="status" label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="contentLength" label="字数" width="70" />
+          <el-table-column label="操作" width="80" fixed="right">
+            <template #default="{ row }">
+              <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <!-- 问答 -->
+      <el-card shadow="never" class="qa-card">
+        <template #header>
+          <span>知识问答</span>
+        </template>
+        <div class="quick">
+          <el-tag
+            v-for="q in quickQuestions"
+            :key="q"
+            class="q-tag"
+            effect="plain"
+            round
+            @click="applyQuestion(q)"
+          >
+            {{ q }}
+          </el-tag>
+        </div>
+        <el-input
+          v-model="question"
+          type="textarea"
+          :rows="3"
+          placeholder="例如：7 天无理由退货怎么处理？"
+          class="mt-2"
+        />
+        <div class="actions">
+          <el-select v-model="mode" size="small" style="width: 120px">
+            <el-option label="mix" value="mix" />
+            <el-option label="hybrid" value="hybrid" />
+            <el-option label="local" value="local" />
+            <el-option label="global" value="global" />
+            <el-option label="naive" value="naive" />
+          </el-select>
+          <el-button type="primary" :loading="querying" @click="handleQuery">检索问答</el-button>
+        </div>
+
+        <div v-if="answer" class="answer-box">
+          <div class="meta">
+            <el-tag size="small" :type="answer.degraded ? 'warning' : 'success'">
+              {{ answer.source || "unknown" }}
+            </el-tag>
+            <el-tag size="small" type="info" class="ml-1">{{ answer.mode }}</el-tag>
+            <span v-if="answer.hint" class="muted ml-2">{{ answer.hint }}</span>
+          </div>
+          <pre class="answer-text">{{ answer.answer }}</pre>
+          <div v-if="answer.references?.length" class="refs">
+            <div class="refs-title">引用</div>
+            <el-collapse>
+              <el-collapse-item
+                v-for="(ref, idx) in answer.references"
+                :key="idx"
+                :title="(ref.title || ref.file_path || '引用') + ' #' + (ref.reference_id || idx + 1)"
+              >
+                <pre class="ref-content">{{ formatRefContent(ref) }}</pre>
+              </el-collapse-item>
+            </el-collapse>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 文本入库 -->
+    <el-dialog v-model="textDialog" title="文本入库" width="640px">
+      <el-form label-width="80px">
+        <el-form-item label="标题">
+          <el-input v-model="textForm.title" />
+        </el-form-item>
+        <el-form-item label="领域">
+          <el-select v-model="textForm.domain" style="width: 100%">
+            <el-option label="售后" value="售后" />
+            <el-option label="运营" value="运营" />
+            <el-option label="商品" value="商品" />
+            <el-option label="general" value="general" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="正文">
+          <el-input v-model="textForm.content" type="textarea" :rows="12" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="textDialog = false">取消</el-button>
+        <el-button type="primary" :loading="savingText" @click="submitText">入库</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 上传 -->
+    <el-dialog v-model="uploadDialog" title="上传文件" width="520px">
+      <el-form label-width="80px">
+        <el-form-item label="标题">
+          <el-input v-model="uploadTitle" placeholder="可选，默认文件名" />
+        </el-form-item>
+        <el-form-item label="领域">
+          <el-select v-model="uploadDomain" style="width: 100%">
+            <el-option label="售后" value="售后" />
+            <el-option label="运营" value="运营" />
+            <el-option label="商品" value="商品" />
+            <el-option label="general" value="general" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="文件">
+          <el-upload
+            v-model:file-list="fileList"
+            :auto-upload="false"
+            :limit="1"
+            drag
+          >
+            <div class="el-upload__text">拖拽或点击选择 md/txt 等</div>
+          </el-upload>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="uploadDialog = false">取消</el-button>
+        <el-button type="primary" :loading="uploading" @click="handleUpload">上传</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.knowledge-page {
+  padding-bottom: 16px;
+}
 .mb-3 {
   margin-bottom: 12px;
 }
-.actions {
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.status-row {
   margin-top: 12px;
 }
-.health {
-  margin-top: 12px;
+.hint {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.muted {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.ml-1 {
+  margin-left: 4px;
 }
 .ml-2 {
   margin-left: 8px;
 }
-.result {
-  margin-top: 16px;
-  white-space: pre-wrap;
-  background: var(--el-fill-color-light);
+.mt-2 {
+  margin-top: 8px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 12px;
+}
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.q-tag {
+  cursor: pointer;
+}
+.actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.answer-box {
+  margin-top: 14px;
   padding: 12px;
-  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+.answer-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 8px 0 0;
+  font-family: inherit;
+  line-height: 1.55;
+}
+.refs {
+  margin-top: 12px;
+}
+.refs-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ref-content {
+  white-space: pre-wrap;
+  font-size: 13px;
+  margin: 0;
+}
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

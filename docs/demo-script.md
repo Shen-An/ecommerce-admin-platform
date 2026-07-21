@@ -28,11 +28,15 @@
 5. **刷新页面** → 左侧会话列表点同一会话 → 历史消息仍在
 6. （可选）「模型配置」关闭 Mock 并填 Chat Key → 回复语气由 LLM 润色，**cards 仍来自 Tool**
 
-## 3. LightRAG 知识库（90s）— Phase2
+## 3. LightRAG 知识库（90s）— **Phase2 可演示**
 
-1. 上传《售后政策》PDF/MD
-2. 提问：「7 天无理由退货怎么处理？」
-3. 展示答案 + 引用来源
+1. 打开 **AI中心 → 知识库**
+2. 点击 **灌入演示语料**（售后政策 + 运营 SOP）
+3. 提问：**「7 天无理由退货怎么处理？」**
+   - LightRAG 未启动：`source=local`，答案含 7 日无理由要点
+   - LightRAG 已启动：`source=lightrag`，mode=mix + 引用
+4. 再问：**「每日开店要检查哪些事项？」** → 命中运营 SOP
+5. （可选）文本入库 / 上传 md 文件
 
 ## 4. 工单 Agent（90s）— Phase3
 
@@ -72,3 +76,10 @@
 - [x] `queryOrders` / `queryProducts` / `summarizeOpsDaily` Feign 只读
 - [x] 前端多轮 UI + cards + 会话列表
 - [x] mock=1 无 Key 可演示；配置 Key 后可润色
+
+## Phase2 检查清单
+
+- [x] 灌入演示语料
+- [x] 本地降级问答可用
+- [x] 文档列表 / 删除
+- [ ] （可选）LightRAG :9621 真实索引

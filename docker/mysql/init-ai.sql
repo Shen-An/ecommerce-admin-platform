@@ -33,8 +33,10 @@ CREATE TABLE IF NOT EXISTS `ai_knowledge_doc` (
   `file_url`         VARCHAR(512)          DEFAULT NULL,
   `file_name`        VARCHAR(256)          DEFAULT NULL,
   `lightrag_doc_id`  VARCHAR(128)          DEFAULT NULL,
-  `status`           VARCHAR(32)  NOT NULL DEFAULT 'pending' COMMENT 'pending/indexing/ready/failed',
+  `status`           VARCHAR(32)  NOT NULL DEFAULT 'pending' COMMENT 'pending/indexing/ready/failed/local',
   `created_by`       BIGINT                DEFAULT NULL,
+  `content_text`     MEDIUMTEXT            DEFAULT NULL COMMENT '原文缓存，供本地降级检索',
+  `error_msg`        VARCHAR(512)          DEFAULT NULL,
   `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
