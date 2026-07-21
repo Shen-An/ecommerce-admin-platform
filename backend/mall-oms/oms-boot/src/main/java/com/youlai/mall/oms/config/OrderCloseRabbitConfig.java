@@ -5,6 +5,7 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Exchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,7 @@ import java.util.Map;
 
 @Component
 @Slf4j
+@ConditionalOnProperty(name = "app.rabbitmq.enabled", havingValue = "true")
 public class OrderCloseRabbitConfig {
 
     // 普通延迟队列

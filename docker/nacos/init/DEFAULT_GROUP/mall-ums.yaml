@@ -22,16 +22,12 @@ mybatis-plus:
     # 这个配置会将执行的sql打印出来，在开发或测试的时候可以用
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
-# Seata 配置
-seata: 
-  # 开启 Seata
-  enabled: true
-  # 事务分组名称
+# Seata：本地 MVP 关闭
+seata:
+  enabled: false
   tx-service-group: default_tx_group
   service:
-    # 事务分组映射，根据分组名称匹配到集群
     vgroup-mapping:
-      # 事务分组名称：集群名称
       default_tx_group: default
   registry:
     type: nacos
@@ -39,7 +35,7 @@ seata:
       application: seata-server
       server-addr: ${nacos.server-addr}
       namespace:
-      group: SEATA_GROUP 
+      group: SEATA_GROUP
 
 # Feign 配置
 feign:

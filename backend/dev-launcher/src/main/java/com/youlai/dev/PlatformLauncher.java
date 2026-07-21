@@ -15,17 +15,19 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 本地一键主启动类：按顺序拉起网关 / 认证 / 系统 / AI / 商品。
+ * 本地一键主启动类：网关 / 认证 / 系统 / AI / 商品 / 会员 / 订单 / 营销。
  * <p>
  * IDEA：打开本类 → 右键 Run 'PlatformLauncher.main()'
  * 命令行：mvn -pl dev-launcher exec:java
  * <p>
  * 参数：
  * --build          启动前先 mvn package（首次或改过代码时建议）
- * --with-oms       额外启动订单 mall-oms
- * --with-pms-oms   兼容旧参数：等同 --with-oms（PMS 已默认启动）
  * --skip-ai        不启动 mall-ai
  * --skip-pms       不启动 mall-pms
+ * --skip-oms       不启动 mall-oms
+ * --skip-ums       不启动 mall-ums
+ * --skip-sms       不启动 mall-sms
+ * --with-oms / --with-pms-oms  兼容旧参数（现默认已启 oms）
  */
 public class PlatformLauncher {
 
@@ -73,21 +75,43 @@ public class PlatformLauncher {
                 "http://localhost:8802/actuator/health",
                 true
         ));
+        SERVICES.put("ums", new ServiceDef(
+                "mall-ums/ums-boot",
+                "ums-boot",
+                "mall-ums/ums-boot/target/ums-boot.jar",
+                8801,
+                "http://localhost:8801/actuator/health",
+                true
+        ));
         SERVICES.put("oms", new ServiceDef(
                 "mall-oms/oms-boot",
                 "oms-boot",
                 "mall-oms/oms-boot/target/oms-boot.jar",
                 8803,
                 "http://localhost:8803/actuator/health",
-                false
+                true
+        ));
+        SERVICES.put("sms", new ServiceDef(
+                "mall-sms/sms-boot",
+                "sms-boot",
+                "mall-sms/sms-boot/target/sms-boot.jar",
+                8804,
+                "http://localhost:8804/actuator/health",
+                true
         ));
     }
 
     public static void main(String[] args) throws Exception {
         boolean build = hasFlag(args, "--build");
-        boolean withOms = hasFlag(args, "--with-oms") || hasFlag(args, "--with-pms-oms");
         boolean skipAi = hasFlag(args, "--skip-ai");
         boolean skipPms = hasFlag(args, "--skip-pms");
+        boolean skipOms = hasFlag(args, "--skip-oms");
+        boolean skipUms = hasFlag(args, "--skip-ums");
+        boolean skipSms = hasFlag(args, "--skip-sms");
+        // 兼容旧参数
+        if (hasFlag(args, "--with-oms") || hasFlag(args, "--with-pms-oms")) {
+            skipOms = false;
+        }
 
         Path backendRoot = resolveBackendRoot();
         System.out.println("=================================================");
@@ -97,9 +121,9 @@ public class PlatformLauncher {
 
         Runtime.getRuntime().addShutdownHook(new Thread(PlatformLauncher::stopAll, "platform-shutdown"));
 
-        if (build || !allJarsExist(backendRoot, withOms, skipAi, skipPms)) {
+        if (build || !allJarsExist(backendRoot, skipAi, skipPms, skipOms, skipUms, skipSms)) {
             System.out.println("[launcher] 打包核心模块 ...");
-            runMavenPackage(backendRoot, withOms, skipAi, skipPms);
+            runMavenPackage(backendRoot, skipAi, skipPms, skipOms, skipUms, skipSms);
         }
 
         List<String> order = new ArrayList<>();
@@ -112,8 +136,14 @@ public class PlatformLauncher {
         if (!skipPms) {
             order.add("pms");
         }
-        if (withOms) {
+        if (!skipUms) {
+            order.add("ums");
+        }
+        if (!skipOms) {
             order.add("oms");
+        }
+        if (!skipSms) {
+            order.add("sms");
         }
 
         for (String key : order) {
@@ -175,7 +205,8 @@ public class PlatformLauncher {
         CHILDREN.add(p);
     }
 
-    private static void runMavenPackage(Path backendRoot, boolean withOms, boolean skipAi, boolean skipPms) throws Exception {
+    private static void runMavenPackage(Path backendRoot, boolean skipAi, boolean skipPms,
+                                        boolean skipOms, boolean skipUms, boolean skipSms) throws Exception {
         List<String> modules = new ArrayList<>();
         modules.add("youlai-gateway");
         modules.add("youlai-auth");
@@ -186,28 +217,24 @@ public class PlatformLauncher {
         if (!skipPms) {
             modules.add("mall-pms/pms-boot");
         }
-        if (withOms) {
+        if (!skipUms) {
+            modules.add("mall-ums/ums-boot");
+        }
+        if (!skipOms) {
             modules.add("mall-oms/oms-boot");
+        }
+        if (!skipSms) {
+            modules.add("mall-sms/sms-boot");
         }
         String pl = String.join(",", modules);
         List<String> cmd = new ArrayList<>();
-        if (isWindows()) {
-            cmd.add(resolveMvnCmd());
-            cmd.add("-pl");
-            cmd.add(pl);
-            cmd.add("-am");
-            cmd.add("package");
-            cmd.add("-DskipTests");
-            cmd.add("-q");
-        } else {
-            cmd.add(resolveMvnCmd());
-            cmd.add("-pl");
-            cmd.add(pl);
-            cmd.add("-am");
-            cmd.add("package");
-            cmd.add("-DskipTests");
-            cmd.add("-q");
-        }
+        cmd.add(resolveMvnCmd());
+        cmd.add("-pl");
+        cmd.add(pl);
+        cmd.add("-am");
+        cmd.add("package");
+        cmd.add("-DskipTests");
+        cmd.add("-q");
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(backendRoot.toFile());
         pb.inheritIO();
@@ -218,7 +245,8 @@ public class PlatformLauncher {
         }
     }
 
-    private static boolean allJarsExist(Path backendRoot, boolean withOms, boolean skipAi, boolean skipPms) {
+    private static boolean allJarsExist(Path backendRoot, boolean skipAi, boolean skipPms,
+                                        boolean skipOms, boolean skipUms, boolean skipSms) {
         for (String key : List.of("gateway", "auth", "system")) {
             if (!Files.isRegularFile(backendRoot.resolve(SERVICES.get(key).jarRelative))) {
                 return false;
@@ -230,7 +258,13 @@ public class PlatformLauncher {
         if (!skipPms && !Files.isRegularFile(backendRoot.resolve(SERVICES.get("pms").jarRelative))) {
             return false;
         }
-        if (withOms && !Files.isRegularFile(backendRoot.resolve(SERVICES.get("oms").jarRelative))) {
+        if (!skipUms && !Files.isRegularFile(backendRoot.resolve(SERVICES.get("ums").jarRelative))) {
+            return false;
+        }
+        if (!skipOms && !Files.isRegularFile(backendRoot.resolve(SERVICES.get("oms").jarRelative))) {
+            return false;
+        }
+        if (!skipSms && !Files.isRegularFile(backendRoot.resolve(SERVICES.get("sms").jarRelative))) {
             return false;
         }
         return true;
@@ -244,7 +278,6 @@ public class PlatformLauncher {
             }
             TimeUnit.SECONDS.sleep(2);
         }
-        // captcha 只要 HTTP 200/401/403 都算进程起来了
         return httpAny(svc.healthUrl);
     }
 
@@ -309,7 +342,6 @@ public class PlatformLauncher {
         } catch (Exception ignored) {
             // ignore
         }
-        // user.dir 常见于 IDEA
         String userDir = System.getProperty("user.dir");
         if (userDir != null) {
             candidates.add(Paths.get(userDir).toAbsolutePath().normalize());

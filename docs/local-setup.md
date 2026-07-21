@@ -88,6 +88,9 @@ mysql.password: 123456
    - system **8800**
    - mall-ai **8805**
    - mall-pms **8802**（商品管理）
+   - mall-ums **8801**（会员列表）
+   - mall-oms **8803**（订单列表）
+   - mall-sms **8804**（营销管理）
 4. 日志目录：`backend/logs/launcher/*.log`
 5. Ctrl+C / 停止运行配置 → 子进程一并关掉
 
@@ -96,9 +99,7 @@ mysql.password: 123456
 | 参数 | 含义 |
 |------|------|
 | `--build` | 启动前 Maven package |
-| `--with-oms` / `--with-pms-oms` | 额外起订单 |
-| `--skip-ai` | 不启 AI |
-| `--skip-pms` | 不启商品服务 |
+| `--skip-ai` / `--skip-pms` / `--skip-ums` / `--skip-oms` / `--skip-sms` | 跳过对应服务 |
 
 ### 方式 B：脚本
 
@@ -114,6 +115,9 @@ scripts\stop-backend.bat
 3. `SystemApplication`（8800）  
 4. `AiApplication`（8805）  
 5. `PmsApplication`（8802）  
+6. `UmsApplication`（8801）  
+7. `OmsApplication`（8803）  
+8. `SmsApplication`（8804）  
 
 验证：
 
@@ -121,6 +125,9 @@ scripts\stop-backend.bat
 curl http://localhost:9999/youlai-auth/api/v1/auth/captcha
 curl http://localhost:8805/api/v1/ai/health
 curl "http://localhost:9999/mall-pms/api/v1/brands/page?pageNum=1&pageSize=10"
+curl "http://localhost:9999/mall-ums/api/v1/members?pageNum=1&pageSize=10"
+curl "http://localhost:9999/mall-oms/api/v1/orders?pageNum=1&pageSize=10"
+curl "http://localhost:9999/mall-sms/api/v1/coupons/page?pageNum=1&pageSize=10"
 ```
 
 ## 5. 启动前端
@@ -181,7 +188,10 @@ redis:
 确认 `nacos_config` 库已存在（本项目 SQL 已建），`allowPublicKeyRetrieval=true`，密码 123456。
 
 **RabbitMQ / Seata 报错**  
-商品服务本地默认 `app.rabbitmq.enabled=false` 且排除 `RabbitAutoConfiguration`，`seata.enabled=false`。订单模块若强依赖 RabbitMQ，可本机装 RabbitMQ 或用 `--with-oms` 前再处理。
+商品/订单服务本地默认 `app.rabbitmq.enabled=false` 且排除 `RabbitAutoConfiguration`，`seata.enabled=false`。管理端列表页不依赖 MQ。
+
+**订单/会员/营销页面系统错误**  
+需要对应服务已注册：`mall-oms:8803`、`mall-ums:8801`、`mall-sms:8804`，网关含 `/mall-oms/**` `/mall-ums/**` `/mall-sms/**`。改配置后执行 `python scripts/import-nacos-config.py` 并启动/重启这些服务。
 
 **商品管理四个页面系统错误**  
 需要：1）Nacos 网关含 `/mall-pms/**` 路由；2）`mall-pms` 已注册且端口 8802 在听。改路由后执行 `python scripts/import-nacos-config.py` 并重启 gateway + pms。

@@ -54,6 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -83,7 +84,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OmsOrder> impleme
     private final WxPayProperties wxPayProperties;
     private final CartService cartService;
     private final OrderItemService orderItemService;
-    private final RabbitTemplate rabbitTemplate;
+    private final ObjectProvider<RabbitTemplate> rabbitTemplateProvider;
     private final StringRedisTemplate redisTemplate;
     private final ThreadPoolExecutor threadPoolExecutor;
     private final MemberFeignClient memberFeignClient;
@@ -240,8 +241,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, OmsOrder> impleme
 
             orderItemService.saveBatch(orderItemEntities);
 
-            // 订单超时未支付取消
-            rabbitTemplate.convertAndSend("order.exchange", "order.close.delay", submitForm.getOrderToken());
+            // 订单超时未支付取消（本地无 RabbitMQ 时跳过延时关单）
+            RabbitTemplate rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
+            if (rabbitTemplate != null) {
+                rabbitTemplate.convertAndSend("order.exchange", "order.close.delay", submitForm.getOrderToken());
+            } else {
+                log.warn("RabbitMQ 未启用，跳过订单({})延时关单消息", submitForm.getOrderToken());
+            }
         }
         return result;
     }
