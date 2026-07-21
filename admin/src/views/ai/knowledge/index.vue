@@ -1,4 +1,4 @@
-<!-- AI 知识库：文档入库 + LightRAG/本地问答 -->
+<!-- AI 知识库：文档入库 + Java 向量 RAG / 关键词降级 -->
 <script setup lang="ts">
 defineOptions({
   name: "AiKnowledge",
@@ -99,11 +99,11 @@ function handleReindex() {
   reindexing.value = true;
   reindexKnowledgeDocs()
     .then(({ data }) => {
-      ElMessage.success(data?.message || "已同步");
+      ElMessage.success(data?.message || "索引完成");
       refreshAll();
     })
     .catch((e: any) => {
-      ElMessage.error(e?.message || "同步失败：请确认 LightRAG 已启动");
+      ElMessage.error(e?.message || "重建失败：请在模型配置填写 Embedding Key");
     })
     .finally(() => {
       reindexing.value = false;
@@ -228,28 +228,14 @@ function formatRefContent(ref: Record<string, any>) {
     <el-card shadow="never" class="mb-3">
       <template #header>
         <div class="card-header">
-          <span>知识库 / LightRAG</span>
+          <span>知识库 / Java RAG</span>
           <div>
             <el-button size="small" @click="refreshAll">刷新状态</el-button>
             <el-button size="small" type="success" :loading="seeding" @click="handleSeed">
               灌入演示语料
             </el-button>
-            <el-button
-              size="small"
-              type="primary"
-              :loading="reindexing"
-              :disabled="status?.lightrag !== 'UP'"
-              @click="handleReindex"
-            >
-              同步到 LightRAG
-            </el-button>
-            <el-button
-              size="small"
-              :loading="refreshingIndex"
-              :disabled="status?.lightrag !== 'UP'"
-              @click="handleRefreshIndex"
-            >
-              刷新索引状态
+            <el-button size="small" type="primary" :loading="reindexing" @click="handleReindex">
+              重建 Java 向量索引
             </el-button>
           </div>
         </div>
@@ -257,16 +243,26 @@ function formatRefContent(ref: Record<string, any>) {
       <el-alert
         type="info"
         :closable="false"
-        title="真索引：启动 LightRAG 后点「同步到 LightRAG」→ 稍候「刷新索引状态」→ 问答 source=lightrag。未启动时走本地关键词降级。"
+        title="真 RAG 在 mall-ai 内完成：模型配置页填 Embedding（+可选 Chat）→ 灌入语料 / 重建索引 → 问答 source=java_rag。无需 Python LightRAG .env。"
       />
       <div v-if="status" class="status-row">
-        <el-tag :type="status.lightrag === 'UP' ? 'success' : 'warning'" size="small">
-          LightRAG {{ status.lightrag || "UNKNOWN" }}
+        <el-tag
+          :type="status.embedding === 'READY' ? 'success' : 'warning'"
+          size="small"
+        >
+          Embedding {{ status.embedding || "UNKNOWN" }}
         </el-tag>
-        <span class="ml-2 muted">{{ status.baseUrl }}</span>
+        <el-tag
+          :type="status.chat === 'READY' ? 'success' : 'info'"
+          size="small"
+          class="ml-2"
+        >
+          Chat {{ status.chat || "OPTIONAL" }}
+        </el-tag>
+        <span class="ml-2 muted">引擎 {{ status.engine || "java_rag" }}</span>
         <span class="ml-2 muted">文档 {{ status.localDocCount ?? 0 }}</span>
-        <el-tag size="small" type="info" class="ml-2">ready {{ status.readyCount ?? 0 }}</el-tag>
-        <el-tag size="small" type="warning" class="ml-2">indexing {{ status.indexingCount ?? 0 }}</el-tag>
+        <el-tag size="small" type="info" class="ml-2">向量块 {{ status.embeddedChunkCount ?? 0 }}</el-tag>
+        <el-tag size="small" type="success" class="ml-2">ready {{ status.readyCount ?? 0 }}</el-tag>
         <el-tag size="small" class="ml-2">local {{ status.localOnlyCount ?? 0 }}</el-tag>
         <div class="hint">{{ status.hint }}</div>
       </div>
@@ -326,14 +322,8 @@ function formatRefContent(ref: Record<string, any>) {
           class="mt-2"
         />
         <div class="actions">
-          <el-select v-model="mode" size="small" style="width: 120px">
-            <el-option label="mix" value="mix" />
-            <el-option label="hybrid" value="hybrid" />
-            <el-option label="local" value="local" />
-            <el-option label="global" value="global" />
-            <el-option label="naive" value="naive" />
-          </el-select>
           <el-button type="primary" :loading="querying" @click="handleQuery">检索问答</el-button>
+          <span class="muted">向量优先，失败降级关键词</span>
         </div>
 
         <div v-if="answer" class="answer-box">

@@ -25,12 +25,19 @@ export interface KnowledgeQueryResult {
 }
 
 export interface KnowledgeStatus {
+  engine?: string;
+  embedding?: string;
+  chat?: string;
+  embeddingModel?: string;
+  chunkCount?: number;
+  embeddedChunkCount?: number;
   lightrag?: string;
   baseUrl?: string;
   localDocCount?: number;
   indexingCount?: number;
   readyCount?: number;
   localOnlyCount?: number;
+  failedCount?: number;
   pipeline?: Record<string, unknown>;
   hint?: string;
 }
@@ -84,7 +91,12 @@ export function seedKnowledgeDocs(): AxiosPromise<{ created: number; message: st
   });
 }
 
-export function reindexKnowledgeDocs(): AxiosPromise<{ pushed: number; message: string }> {
+/** 重建 Java 向量索引（Key 来自模型配置） */
+export function reindexKnowledgeDocs(): AxiosPromise<{
+  pushed: number;
+  indexed?: number;
+  message: string;
+}> {
   return request({
     url: "/mall-ai/api/v1/ai/knowledge/docs/reindex",
     method: "post",

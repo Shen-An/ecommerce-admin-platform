@@ -2,6 +2,7 @@ package com.youlai.mall.ai.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.youlai.common.security.util.SecurityUtils;
+import com.youlai.mall.ai.llm.EmbeddingClient;
 import com.youlai.mall.ai.mapper.AiKnowledgeDocMapper;
 import com.youlai.mall.ai.model.entity.AiKnowledgeDoc;
 import com.youlai.mall.ai.model.entity.AiModelConfig;
@@ -9,6 +10,7 @@ import com.youlai.mall.ai.model.form.KnowledgeQueryForm;
 import com.youlai.mall.ai.model.form.KnowledgeTextForm;
 import com.youlai.mall.ai.model.vo.KnowledgeDocVO;
 import com.youlai.mall.ai.model.vo.KnowledgeQueryVO;
+import com.youlai.mall.ai.rag.JavaRagService;
 import com.youlai.mall.ai.rag.LightRagClient;
 import com.youlai.mall.ai.service.AiModelConfigService;
 import com.youlai.mall.ai.service.KnowledgeService;
@@ -28,47 +30,64 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 知识库：主路径为纯 Java RAG（模型配置 Embedding/Chat），关键词降级；LightRAG 可选。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class KnowledgeServiceImpl implements KnowledgeService {
 
     private final AiKnowledgeDocMapper docMapper;
+    private final JavaRagService javaRagService;
+    private final EmbeddingClient embeddingClient;
     private final LightRagClient lightRagClient;
     private final AiModelConfigService modelConfigService;
 
     @Override
     public Map<String, Object> status() {
-        AiModelConfig cfg = modelConfigService.getRuntimeConfig(AiModelConfigServiceImpl.DEFAULT_KEY);
-        String baseUrl = cfg != null && StringUtils.hasText(cfg.getLightragBaseUrl())
-                ? cfg.getLightragBaseUrl() : null;
-        boolean up = lightRagClient.health(baseUrl);
+        AiModelConfig cfg = runtimeConfig();
+        boolean emb = embeddingClient.isAvailable(cfg);
+        boolean chat = cfg != null
+                && (cfg.getMockEnabled() == null || cfg.getMockEnabled() == 0)
+                && StringUtils.hasText(cfg.getChatApiKey());
         long localDocs = docMapper.selectCount(new LambdaQueryWrapper<>());
-        Map<String, Object> data = new LinkedHashMap<>();
-        long indexing = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
-                .eq(AiKnowledgeDoc::getStatus, "indexing"));
         long ready = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
                 .eq(AiKnowledgeDoc::getStatus, "ready"));
         long localOnly = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
                 .eq(AiKnowledgeDoc::getStatus, "local"));
-        data.put("lightrag", up ? "UP" : "DOWN");
-        data.put("baseUrl", lightRagClient.resolveBaseUrl(baseUrl));
+        long failed = docMapper.selectCount(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                .eq(AiKnowledgeDoc::getStatus, "failed"));
+        long chunks = javaRagService.countChunks();
+        long embedded = javaRagService.countEmbeddedChunks();
+
+        String baseUrl = cfg != null && StringUtils.hasText(cfg.getLightragBaseUrl())
+                ? cfg.getLightragBaseUrl() : null;
+        boolean lrUp = lightRagClient.health(baseUrl);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("engine", "java_rag");
+        data.put("embedding", emb ? "READY" : "NOT_CONFIGURED");
+        data.put("chat", chat ? "READY" : "OPTIONAL");
+        data.put("embeddingModel", cfg != null ? cfg.getEmbeddingModel() : null);
+        data.put("chunkCount", chunks);
+        data.put("embeddedChunkCount", embedded);
         data.put("localDocCount", localDocs);
-        data.put("indexingCount", indexing);
         data.put("readyCount", ready);
         data.put("localOnlyCount", localOnly);
-        if (up) {
-            Map<String, Object> pipeline = lightRagClient.pipelineStatus(baseUrl);
-            if (pipeline != null && !pipeline.isEmpty()) {
-                data.put("pipeline", pipeline);
-            }
-            data.put("hint", "LightRAG 可用：入库同步索引；可点「同步到 LightRAG」补推 local 文档，"
-                    + "「刷新索引状态」将 indexing→ready");
+        data.put("failedCount", failed);
+        data.put("lightrag", lrUp ? "UP" : "DOWN");
+        data.put("baseUrl", lightRagClient.resolveBaseUrl(baseUrl));
+        if (emb) {
+            data.put("hint", "Java RAG 可用：入库自动分块+向量（Key 来自「模型配置」）。"
+                    + "问答：向量检索" + (chat ? "+LLM 生成" : "（可配 Chat Key 生成答案）")
+                    + "；无向量时降级关键词。");
         } else {
-            data.put("hint", "LightRAG 未启动：入库仅写本地库，问答走关键词检索降级。"
-                    + "启动见 scripts/start-lightrag.bat");
+            data.put("hint", "请在「AI中心 → 模型配置」填写 Embedding API Key/模型，"
+                    + "再点「重建 Java 向量索引」。当前仅关键词检索。");
         }
         return data;
     }
@@ -91,8 +110,17 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 form.getDomain(),
                 form.getTitle() + ".md",
                 form.getContent());
-        pushToLightRag(doc, form.getContent(), null);
+        indexDoc(doc);
         docMapper.insert(doc);
+        // insert 后才有 id，再写 chunk
+        javaRagService.deleteChunks(doc.getId());
+        int n = javaRagService.indexDocument(doc, runtimeConfig());
+        if (n > 0 && embeddingClient.isAvailable(runtimeConfig())) {
+            doc.setStatus("ready");
+            doc.setErrorMsg(null);
+            doc.setUpdatedAt(LocalDateTime.now());
+            docMapper.updateById(doc);
+        }
         return toVo(doc);
     }
 
@@ -103,10 +131,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             throw new IllegalArgumentException("文件不能为空");
         }
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.bin";
-        String content;
         try {
             byte[] bytes = file.getBytes();
-            // 文本类直接读；其它类型仅上传 LightRAG，本地 content 记摘要
+            String content;
             if (isTextFile(filename)) {
                 content = new String(bytes, StandardCharsets.UTF_8);
             } else {
@@ -117,20 +144,17 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                     domain,
                     filename,
                     content);
-            if (lightRagUp()) {
-                try {
-                    Map<String, Object> resp = lightRagClient.uploadFile(bytes, filename, lightRagBase());
-                    applyTrack(doc, resp);
-                    doc.setStatus("indexing");
-                } catch (Exception ex) {
-                    log.warn("LightRAG upload failed, keep local: {}", ex.getMessage());
-                    doc.setStatus("local");
-                    doc.setErrorMsg(safe(ex.getMessage()));
-                }
-            } else {
-                doc.setStatus("local");
-            }
+            indexDoc(doc);
             docMapper.insert(doc);
+            if (!content.startsWith("[binary file]")) {
+                int n = javaRagService.indexDocument(doc, runtimeConfig());
+                if (n > 0 && embeddingClient.isAvailable(runtimeConfig())) {
+                    doc.setStatus("ready");
+                    doc.setErrorMsg(null);
+                    doc.setUpdatedAt(LocalDateTime.now());
+                    docMapper.updateById(doc);
+                }
+            }
             return toVo(doc);
         } catch (IllegalArgumentException ex) {
             throw ex;
@@ -145,16 +169,25 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (id == null) {
             throw new IllegalArgumentException("文档ID不能为空");
         }
+        javaRagService.deleteChunks(id);
         docMapper.deleteById(id);
-        // LightRAG 远端删除接口版本差异大，Phase2 以本地元数据删除为主
     }
 
     @Override
     public KnowledgeQueryVO query(KnowledgeQueryForm form) {
         String question = form.getQuestion().trim();
-        String mode = StringUtils.hasText(form.getMode()) ? form.getMode() : "mix";
+        AiModelConfig cfg = runtimeConfig();
+        Map<Long, AiKnowledgeDoc> docMap = loadDocMap();
 
+        // 1) Java 向量 RAG（主路径）
+        KnowledgeQueryVO javaHit = javaRagService.query(question, cfg, docMap);
+        if (javaHit != null) {
+            return javaHit;
+        }
+
+        // 2) 可选 LightRAG（若仍在跑）
         if (lightRagUp()) {
+            String mode = StringUtils.hasText(form.getMode()) ? form.getMode() : "mix";
             Map<String, Object> resp = lightRagClient.query(question, mode, lightRagBase());
             boolean degraded = Boolean.TRUE.equals(resp.get("degraded"));
             if (!degraded) {
@@ -166,23 +199,23 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                         .source("lightrag")
                         .degraded(false)
                         .references(normalizeRefs(refs))
-                        .hint("答案来自 LightRAG（mode=" + mode + "）")
+                        .hint("答案来自可选 LightRAG（mode=" + mode + "）")
                         .build();
             }
         }
 
-        // 本地关键词降级
+        // 3) 关键词降级
         KnowledgeQueryVO local = localKeywordAnswer(question);
         if (local != null) {
             return local;
         }
         return KnowledgeQueryVO.builder()
-                .answer("未命中知识库内容。请先「灌入演示语料」或上传售后/运营文档；并启动 LightRAG 以启用图+向量检索。")
-                .mode(mode)
+                .answer("未命中知识库。请「灌入演示语料」；并在模型配置填写 Embedding Key 后点「重建 Java 向量索引」。")
+                .mode("none")
                 .source("degraded")
                 .degraded(true)
                 .references(List.of())
-                .hint("LightRAG DOWN 且本地无匹配段落")
+                .hint("无向量命中且关键词无匹配")
                 .build();
     }
 
@@ -204,25 +237,26 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             ingestText(form);
             n++;
         }
-        // 若 LightRAG 已启动，顺带尝试把仍为 local 的文档推上去
-        if (lightRagUp()) {
-            reindexToLightRag();
+        // 已有文档也尝试补建向量（无 Embedding Key 时跳过）
+        try {
+            reindexJavaVectors();
+        } catch (Exception ex) {
+            log.info("seed skip vector reindex: {}", ex.getMessage());
         }
         return n;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int reindexToLightRag() {
-        if (!lightRagUp()) {
-            throw new IllegalStateException("LightRAG 未启动（" + lightRagClient.resolveBaseUrl(lightRagBase())
-                    + "），无法同步索引。请先 scripts/start-lightrag.bat");
+    public int reindexJavaVectors() {
+        AiModelConfig cfg = runtimeConfig();
+        if (!embeddingClient.isAvailable(cfg)) {
+            throw new IllegalStateException("请先在「模型配置」填写 Embedding API Key 与模型，再重建索引");
         }
         List<AiKnowledgeDoc> docs = docMapper.selectList(new LambdaQueryWrapper<AiKnowledgeDoc>()
-                .in(AiKnowledgeDoc::getStatus, List.of("local", "failed", "pending"))
                 .isNotNull(AiKnowledgeDoc::getContentText)
                 .orderByAsc(AiKnowledgeDoc::getId)
-                .last("limit 50"));
+                .last("limit 100"));
         int n = 0;
         for (AiKnowledgeDoc doc : docs) {
             if (!StringUtils.hasText(doc.getContentText())
@@ -230,72 +264,73 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 continue;
             }
             try {
-                Map<String, Object> resp = lightRagClient.insertText(
-                        doc.getContentText(),
-                        doc.getFileName() != null ? doc.getFileName() : doc.getTitle() + ".md",
-                        lightRagBase());
-                applyTrack(doc, resp);
-                doc.setStatus("indexing");
-                doc.setErrorMsg(null);
+                int chunks = javaRagService.indexDocument(doc, cfg);
+                if (chunks > 0) {
+                    doc.setStatus("ready");
+                    doc.setErrorMsg(null);
+                } else {
+                    doc.setStatus("local");
+                    doc.setErrorMsg("embedding returned empty");
+                }
                 doc.setUpdatedAt(LocalDateTime.now());
                 docMapper.updateById(doc);
                 n++;
             } catch (Exception ex) {
-                log.warn("reindex doc {} failed: {}", doc.getId(), ex.getMessage());
+                log.warn("java reindex doc {} failed: {}", doc.getId(), ex.getMessage());
                 doc.setStatus("failed");
                 doc.setErrorMsg(safe(ex.getMessage()));
                 doc.setUpdatedAt(LocalDateTime.now());
                 docMapper.updateById(doc);
             }
         }
-        log.info("reindexToLightRag pushed {} docs", n);
+        log.info("reindexJavaVectors docs={}", n);
         return n;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public int reindexToLightRag() {
+        // 兼容旧 API：改为重建 Java 向量
+        return reindexJavaVectors();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public int refreshIndexStatus() {
-        if (!lightRagUp()) {
-            return 0;
-        }
-        List<AiKnowledgeDoc> docs = docMapper.selectList(new LambdaQueryWrapper<AiKnowledgeDoc>()
-                .in(AiKnowledgeDoc::getStatus, List.of("indexing", "pending"))
-                .orderByAsc(AiKnowledgeDoc::getId)
-                .last("limit 50"));
         int changed = 0;
-        for (AiKnowledgeDoc doc : docs) {
-            boolean updated = false;
-            if (StringUtils.hasText(doc.getLightragDocId())) {
-                Map<String, Object> track = lightRagClient.trackStatus(doc.getLightragDocId(), lightRagBase());
-                if (LightRagClient.looksReady(track)) {
-                    doc.setStatus("ready");
-                    doc.setErrorMsg(null);
-                    updated = true;
-                } else if (LightRagClient.looksFailed(track)) {
-                    doc.setStatus("failed");
-                    Object err = track.get("error");
-                    if (err == null) {
-                        err = track.get("message");
+        // 可选：仍探测 LightRAG track
+        if (lightRagUp()) {
+            List<AiKnowledgeDoc> indexing = docMapper.selectList(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                    .eq(AiKnowledgeDoc::getStatus, "indexing")
+                    .last("limit 50"));
+            for (AiKnowledgeDoc doc : indexing) {
+                if (StringUtils.hasText(doc.getLightragDocId())) {
+                    Map<String, Object> track = lightRagClient.trackStatus(doc.getLightragDocId(), lightRagBase());
+                    if (LightRagClient.looksReady(track)) {
+                        doc.setStatus("ready");
+                        doc.setUpdatedAt(LocalDateTime.now());
+                        docMapper.updateById(doc);
+                        changed++;
                     }
-                    doc.setErrorMsg(safe(err != null ? err.toString() : "index failed"));
-                    updated = true;
                 }
             }
-            // 无 track 或无法判定：若已在 LightRAG 存活超过 30s，演示场景标 ready（索引异步）
-            if (!updated && "indexing".equals(doc.getStatus())
-                    && doc.getUpdatedAt() != null
-                    && doc.getUpdatedAt().isBefore(LocalDateTime.now().minusSeconds(30))) {
-                doc.setStatus("ready");
-                updated = true;
-            }
-            if (updated) {
-                doc.setUpdatedAt(LocalDateTime.now());
-                docMapper.updateById(doc);
-                changed++;
-            }
         }
-        log.info("refreshIndexStatus changed {}", changed);
         return changed;
+    }
+
+    private void indexDoc(AiKnowledgeDoc doc) {
+        if (embeddingClient.isAvailable(runtimeConfig())) {
+            doc.setStatus("indexing");
+        } else {
+            doc.setStatus("local");
+        }
+    }
+
+    private Map<Long, AiKnowledgeDoc> loadDocMap() {
+        return docMapper.selectList(new LambdaQueryWrapper<AiKnowledgeDoc>()
+                        .last("limit 200"))
+                .stream()
+                .collect(Collectors.toMap(AiKnowledgeDoc::getId, Function.identity(), (a, b) -> a));
     }
 
     private KnowledgeQueryVO localKeywordAnswer(String question) {
@@ -330,8 +365,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             if (score <= 0) {
                 continue;
             }
-            String snippet = bestSnippet(text, tokens);
-            hits.add(new Hit(doc, snippet, score));
+            hits.add(new Hit(doc, bestSnippet(text, tokens), score));
         }
         if (hits.isEmpty()) {
             return null;
@@ -340,7 +374,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         List<Hit> top = hits.stream().limit(3).toList();
 
         StringBuilder answer = new StringBuilder();
-        answer.append("【本地知识检索】根据已入库文档整理如下（LightRAG 未启用时的关键词降级）：\n\n");
+        answer.append("【本地关键词检索】（未配置 Embedding 或向量未命中时的降级）：\n\n");
         List<Map<String, Object>> refs = new ArrayList<>();
         int i = 1;
         for (Hit h : top) {
@@ -361,46 +395,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 .source("local")
                 .degraded(true)
                 .references(refs)
-                .hint("本地 MySQL 关键词匹配；启动 LightRAG 后将升级为图+向量检索")
+                .hint("关键词匹配；在模型配置填写 Embedding 后可升级为 Java 向量 RAG")
                 .build();
-    }
-
-    private void pushToLightRag(AiKnowledgeDoc doc, String content, byte[] fileBytes) {
-        if (!lightRagUp()) {
-            doc.setStatus("local");
-            return;
-        }
-        try {
-            Map<String, Object> resp;
-            if (fileBytes != null) {
-                resp = lightRagClient.uploadFile(fileBytes, doc.getFileName(), lightRagBase());
-            } else {
-                resp = lightRagClient.insertText(content, doc.getFileName(), lightRagBase());
-            }
-            applyTrack(doc, resp);
-            doc.setStatus("indexing");
-        } catch (Exception ex) {
-            log.warn("LightRAG insert failed: {}", ex.getMessage());
-            doc.setStatus("local");
-            doc.setErrorMsg(safe(ex.getMessage()));
-        }
-    }
-
-    private void applyTrack(AiKnowledgeDoc doc, Map<String, Object> resp) {
-        if (resp == null) {
-            return;
-        }
-        Object track = resp.get("track_id");
-        if (track == null) {
-            track = resp.get("trackId");
-        }
-        if (track != null) {
-            doc.setLightragDocId(String.valueOf(track));
-        }
-        Object msg = resp.get("message");
-        if (msg != null && !StringUtils.hasText(doc.getErrorMsg())) {
-            // 非错误信息可不写
-        }
     }
 
     private AiKnowledgeDoc newDocShell(String title, String domain, String fileName, String content) {
@@ -417,12 +413,16 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         return doc;
     }
 
+    private AiModelConfig runtimeConfig() {
+        return modelConfigService.getRuntimeConfig(AiModelConfigServiceImpl.DEFAULT_KEY);
+    }
+
     private boolean lightRagUp() {
         return lightRagClient.health(lightRagBase());
     }
 
     private String lightRagBase() {
-        AiModelConfig cfg = modelConfigService.getRuntimeConfig(AiModelConfigServiceImpl.DEFAULT_KEY);
+        AiModelConfig cfg = runtimeConfig();
         return cfg != null ? cfg.getLightragBaseUrl() : null;
     }
 
@@ -448,10 +448,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         }
         List<Map<String, Object>> out = new ArrayList<>();
         for (Map<String, Object> r : refs) {
-            if (r == null) {
-                continue;
+            if (r != null) {
+                out.add(new LinkedHashMap<>(r));
             }
-            out.add(new LinkedHashMap<>(r));
         }
         return out;
     }
@@ -461,20 +460,18 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (!StringUtils.hasText(cleaned)) {
             return List.of();
         }
-        // 中文按连续字块 + 英文词
         List<String> tokens = new ArrayList<>();
         for (String part : cleaned.split("\\s+")) {
             if (part.length() >= 2) {
                 tokens.add(part);
             }
-            // 再拆 2-gram 提升命中
-            if (part.length() >= 4 && part.codePoints().anyMatch(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)) {
+            if (part.length() >= 4 && part.codePoints().anyMatch(
+                    cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)) {
                 for (int i = 0; i < part.length() - 1; i++) {
                     tokens.add(part.substring(i, i + 2));
                 }
             }
         }
-        // 业务关键词保底
         for (String k : List.of("退货", "退款", "无理由", "质量", "售后", "SOP", "发货", "库存", "客服", "升级")) {
             if (q.contains(k)) {
                 tokens.add(k);
@@ -488,9 +485,6 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         String best = null;
         int bestScore = -1;
         for (String p : paras) {
-            if (!StringUtils.hasText(p) || p.trim().startsWith("#")) {
-                // 标题行也可，但优先正文
-            }
             int s = 0;
             for (String t : tokens) {
                 if (p.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT))) {

@@ -35,12 +35,25 @@ CREATE TABLE IF NOT EXISTS `ai_knowledge_doc` (
   `lightrag_doc_id`  VARCHAR(128)          DEFAULT NULL,
   `status`           VARCHAR(32)  NOT NULL DEFAULT 'pending' COMMENT 'pending/indexing/ready/failed/local',
   `created_by`       BIGINT                DEFAULT NULL,
-  `content_text`     MEDIUMTEXT            DEFAULT NULL COMMENT '原文缓存，供本地降级检索',
+  `content_text`     MEDIUMTEXT            DEFAULT NULL COMMENT '原文缓存，供本地/向量检索',
   `error_msg`        VARCHAR(512)          DEFAULT NULL,
   `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库文档元数据';
+
+-- 纯 Java RAG 分块向量（JSON 存 float[]，Key 来自 ai_model_config）
+CREATE TABLE IF NOT EXISTS `ai_knowledge_chunk` (
+  `id`              BIGINT       NOT NULL AUTO_INCREMENT,
+  `doc_id`          BIGINT       NOT NULL,
+  `chunk_index`     INT          NOT NULL DEFAULT 0,
+  `content`         MEDIUMTEXT   NOT NULL,
+  `embedding_json`  MEDIUMTEXT            DEFAULT NULL COMMENT 'float[] JSON',
+  `embedding_dim`   INT                   DEFAULT NULL,
+  `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_doc` (`doc_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库分块向量';
 
 CREATE TABLE IF NOT EXISTS `ai_ticket` (
   `id`          BIGINT       NOT NULL AUTO_INCREMENT,

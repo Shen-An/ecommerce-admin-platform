@@ -27,14 +27,18 @@ public interface KnowledgeService {
     int seedDemoDocs();
 
     /**
-     * 将本地 local/failed 文档重新推送到 LightRAG 建索引。
-     * @return 成功推送篇数
+     * 用模型配置页 Embedding 重建全部文档的 Java 向量索引。
+     * @return 处理的文档数
+     */
+    int reindexJavaVectors();
+
+    /**
+     * @deprecated 兼容旧前端：等同 {@link #reindexJavaVectors()}
      */
     int reindexToLightRag();
 
     /**
-     * 刷新 indexing 文档状态（track/list 探测 ready/failed）。
-     * @return 状态变更篇数
+     * 刷新文档状态（可选 LightRAG track）。
      */
     int refreshIndexStatus();
 }

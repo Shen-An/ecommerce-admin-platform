@@ -27,7 +27,7 @@ public class KnowledgeController {
 
     private final KnowledgeService knowledgeService;
 
-    @Operation(summary = "LightRAG / 本地知识库状态")
+    @Operation(summary = "Java RAG / 知识库状态")
     @GetMapping("/status")
     public Result<Map<String, Object>> status() {
         return Result.success(knowledgeService.status());
@@ -39,7 +39,7 @@ public class KnowledgeController {
         return Result.success(knowledgeService.listDocs());
     }
 
-    @Operation(summary = "文本入库（同步写 MySQL，LightRAG 可用则索引）")
+    @Operation(summary = "文本入库（MySQL + Java 向量分块）")
     @PostMapping("/docs/text")
     public Result<KnowledgeDocVO> ingestText(@Valid @RequestBody KnowledgeTextForm form) {
         return Result.success(knowledgeService.ingestText(form));
@@ -54,14 +54,14 @@ public class KnowledgeController {
         return Result.success(knowledgeService.ingestFile(file, domain, title));
     }
 
-    @Operation(summary = "删除文档元数据")
+    @Operation(summary = "删除文档与向量分块")
     @DeleteMapping("/docs/{id}")
     public Result<Void> delete(@Parameter(description = "文档ID") @PathVariable Long id) {
         knowledgeService.deleteDoc(id);
         return Result.success();
     }
 
-    @Operation(summary = "知识库问答（LightRAG 优先，失败本地关键词降级）")
+    @Operation(summary = "知识库问答（Java 向量 RAG → 关键词降级）")
     @PostMapping("/query")
     public Result<KnowledgeQueryVO> query(@Valid @RequestBody KnowledgeQueryForm form,
                                           @RequestParam(required = false) String mode) {
@@ -77,21 +77,22 @@ public class KnowledgeController {
         int n = knowledgeService.seedDemoDocs();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("created", n);
-        data.put("message", n == 0 ? "演示语料已存在" : "已灌入 " + n + " 篇演示文档");
+        data.put("message", n == 0 ? "演示语料已存在（并已尝试补建向量）" : "已灌入 " + n + " 篇演示文档");
         return Result.success(data);
     }
 
-    @Operation(summary = "将本地 local/failed 文档同步推送到 LightRAG 建索引")
+    @Operation(summary = "重建 Java 向量索引（Embedding Key 来自模型配置）")
     @PostMapping("/docs/reindex")
     public Result<Map<String, Object>> reindex() {
-        int n = knowledgeService.reindexToLightRag();
+        int n = knowledgeService.reindexJavaVectors();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("pushed", n);
-        data.put("message", n == 0 ? "没有需要同步的本地文档" : "已推送 " + n + " 篇到 LightRAG（indexing）");
+        data.put("indexed", n);
+        data.put("message", n == 0 ? "没有可索引文档" : "已为 " + n + " 篇文档重建 Java 向量索引");
         return Result.success(data);
     }
 
-    @Operation(summary = "刷新 indexing 文档状态（探测 ready/failed）")
+    @Operation(summary = "刷新文档状态")
     @PostMapping("/docs/refresh-status")
     public Result<Map<String, Object>> refreshStatus() {
         int n = knowledgeService.refreshIndexStatus();

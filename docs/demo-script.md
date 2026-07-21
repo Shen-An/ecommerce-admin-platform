@@ -27,13 +27,13 @@
 5. **刷新页面** → 左侧会话列表点同一会话 → 历史消息仍在
 6. （可选）「模型配置」关闭 Mock 并填 Chat Key → 回复语气由 LLM 润色，**cards 仍来自 Tool**
 
-## 3. LightRAG 知识库（90s）— **Phase2 可演示**
+## 3. 知识库 Java RAG（90s）— **Phase2 可演示**
 
-1. 打开 **AI中心 → 知识库**
+1. 打开 **AI中心 → 知识库**（主路径纯 Java，无需 Python LightRAG）
 2. 点击 **灌入演示语料**（售后政策 + 运营 SOP）
 3. 提问：**「7 天无理由退货怎么处理？」**
-   - LightRAG 未启动：`source=local`，答案含 7 日无理由要点
-   - LightRAG 已启动：`source=lightrag`，mode=mix + 引用
+   - 未配 Embedding：`source=local` 关键词，仍含 7 日无理由要点
+   - 模型配置已填 Embedding 并点 **重建 Java 向量索引**：`source=java_rag` + 引用 score
 4. 再问：**「每日开店要检查哪些事项？」** → 命中运营 SOP
 5. （可选）文本入库 / 上传 md 文件
 
@@ -59,11 +59,11 @@
 2. 工程点：鉴权、会话审计、配置外置、降级策略
 3. 一页纸速查：[demo-onepager.md](demo-onepager.md)
 
-## Phase 真索引（可选加时 30s）
+## 真向量 RAG（可选加时 30s）
 
-1. `scripts\start-lightrag.bat` + 填 `.env` Key  
-2. 知识库 → **同步到 LightRAG** → **刷新索引状态**  
-3. 再问「7 天无理由」→ `source=lightrag`
+1. **模型配置** 填 Embedding Key（NVIDIA/通义兼容），可选 Chat Key  
+2. 知识库 → **重建 Java 向量索引**  
+3. 再问「7 天无理由」→ `source=java_rag`
 
 ## Phase1 验收话术速查
 
@@ -90,10 +90,10 @@
 ## Phase2 检查清单
 
 - [x] 灌入演示语料
-- [x] 本地降级问答可用
+- [x] 本地关键词降级问答可用
 - [x] 文档列表 / 删除
-- [x] 同步到 LightRAG + 刷新索引状态 API/UI
-- [ ] （环境）本机填 Key 后 :9621 真索引演示
+- [x] Java 向量表 `ai_knowledge_chunk` + 重建索引 API/UI
+- [ ] （环境）模型配置填 Embedding 后 `source=java_rag`
 
 ## Phase3 / 4 速查
 
