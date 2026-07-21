@@ -1,0 +1,112 @@
+# 本地无 RabbitMQ 时关闭库存释放监听，避免启动失败
+app:
+  rabbitmq:
+    enabled: false
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${mysql.host}:${mysql.port}/mall_pms?zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&autoReconnect=true
+    username: ${mysql.username}
+    password: ${mysql.password}
+  data:
+    redis:
+      database: ${redis.database}
+      host: ${redis.host}
+      port: ${redis.port}
+      password: ${redis.password}
+      lettuce:
+        pool:
+          min-idle: 1
+  # RabbitMQ（app.rabbitmq.enabled=true 时再启用）
+  rabbitmq:
+    host: ${rabbitmq.host:localhost}
+    port: ${rabbitmq.port:5672}
+    username: ${rabbitmq.username:guest}
+    password: ${rabbitmq.password:guest}
+    virtual-host: /
+  cache:
+    # 缓存类型
+    type: redis
+    # 缓存时间(单位：ms)
+    redis:
+      time-to-live: 3600000
+      # 缓存null值，防止缓存穿透
+      cache-null-values: true
+      # 允许使用缓存前缀，
+      use-key-prefix: true
+      # 缓存前缀，没有设置使用注解的缓存名称(value)作为前缀，和注解的key用双冒号::拼接组成完整缓存key
+      # key-prefix:
+
+mybatis-plus:
+  configuration:
+    # 驼峰下划线转换 
+    map-underscore-to-camel-case: true
+    # 这个配置会将执行的sql打印出来，在开发或测试的时候可以用
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Seata：本地 MVP 关闭（无 seata-server 时避免启动卡住/失败）
+seata:
+  enabled: false
+  tx-service-group: default_tx_group
+  service:
+    vgroup-mapping:
+      default_tx_group: default
+  registry:
+    type: nacos
+    nacos:
+      application: seata-server
+      server-addr: ${nacos.server-addr}
+      namespace:
+      group: SEATA_GROUP
+      
+# feign 配置
+feign:
+  httpclient:
+    enabled: true
+  okhttp:
+    enabled: false
+  sentinel:  # 开启feign对sentinel的支持
+    enabled: false 
+
+# 安全配置
+security:
+  # 白名单
+  whitelist-paths:
+      - /app-api/v1/categories
+      - /app-api/v1/spu/**
+
+# springdoc-openapi项目配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.youlai.mall.pms.controller
+  # Api文档信息
+  info:
+    title: 商品服务
+    version: 3.0.0
+    description: 库存、分类、品牌、规格、参数等接口
+    contact:
+      name: youlai
+      url: https://www.youlai.tech
+      email: youlaitech@163.com
+    license:
+      name: Apache 2.0
+      url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+# knife4j的增强配置，不需要增强可以不配
+knife4j:
+  enable: false
+  setting:
+    language: zh_cn

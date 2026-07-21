@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.youlai.mall.oms.mapper.OrderMapper">
+
+    <resultMap id="OrderMap" type="com.youlai.mall.oms.model.bo.OrderBO">
+        <collection property="orderItems"
+                    column="{orderId=id}"
+                    select="com.youlai.mall.oms.mapper.OrderItemMapper.getOrderItemsByOrderId">
+        </collection>
+    </resultMap>
+
+    <!-- 订单分页列表 -->
+    <select id="getOrderPage" resultMap="OrderMap">
+
+        SELECT
+           t1.id,
+           t1.order_sn,
+           t1.total_amount,
+           t1.payment_amount,
+           t1.payment_method,
+           t1.status,
+           t1.total_amount,
+           t1.total_quantity,
+           t1.create_time,
+           t1.member_id,
+           t1.source,
+           t1.remark
+        FROM
+            oms_order t1
+        <where>
+            <if test ='queryParams.keywords !=null and queryParams.keywords.trim() neq ""' >
+                AND
+                (
+                t1.order_sn like  concat('%',#{queryParams.keywords},'%')
+                )
+            </if>
+            <if test ='queryParams.status !=null ' >
+                AND t1.status= #{queryParams.status}
+            </if>
+            <if test ='queryParams.beginDate !=null' >
+                AND t1.create_time &gt;= #{queryParams.beginDate}
+            </if>
+
+            <if test ='queryParams.endDate !=null' >
+                AND t1.create_time &lt;= #{queryParams.endDate}
+            </if>
+        </where>
+        ORDER BY
+            t1.create_time DESC
+    </select>
+</mapper>

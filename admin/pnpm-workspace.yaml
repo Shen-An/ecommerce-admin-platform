@@ -1,0 +1,8 @@
+# pnpm 11+：允许依赖执行 postinstall 构建脚本（否则 vite/esbuild 无法运行）
+allowBuilds:
+  "@parcel/watcher": true
+  bufferutil: true
+  es5-ext: true
+  esbuild: true
+  utf-8-validate: true
+  vue-demi: true

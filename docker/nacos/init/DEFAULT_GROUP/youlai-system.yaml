@@ -1,0 +1,143 @@
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver 
+    url: jdbc:mysql://${mysql.host}:${mysql.port}/youlai_system?zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&autoReconnect=true
+    username: ${mysql.username}
+    password: ${mysql.password}
+  data:
+    redis:
+      database: ${redis.database}
+      host: ${redis.host}
+      port: ${redis.port}
+      password: ${redis.password}
+      lettuce:
+        pool:
+          min-idle: 1
+  # RabbitMQ 配置
+  rabbitmq:
+    host: ${rabbitmq.host}
+    port: ${rabbitmq.port}
+    username: ${rabbitmq.username}
+    password: ${rabbitmq.password}
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: manual   
+  cache:
+    # 缓存类型 redis、none(不使用缓存) 
+    type: redis
+    # 缓存时间(单位：ms)
+    redis:
+      time-to-live: 3600000
+      # 缓存null值，防止缓存穿透
+      cache-null-values: true
+  cloud:
+    sentinel:
+      enabled: false
+      eager: true # 取消控制台懒加载，项目启动即连接Sentinel
+      transport:
+        client-ip: localhost
+        dashboard: localhost:8080
+      datasource:
+        # 限流规则，flow为key，随便定义
+        flow:
+          nacos:
+            server-addr: ${spring.cloud.nacos.discovery.server-addr}
+            dataId: ${spring.application.name}-flow-rules
+            groupId: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
+        # 降级规则
+        degrade:
+          nacos:
+            server-addr: ${spring.cloud.nacos.discovery.server-addr}
+            dataId: ${spring.application.name}-degrade-rules
+            groupId: SENTINEL_GROUP
+            data-type: json
+            rule-type: degrade
+                
+mybatis-plus:
+  configuration:
+    # 驼峰下划线转换
+    map-underscore-to-camel-case: true
+    # 这个配置会将执行的sql打印出来，在开发或测试的时候可以用
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    default-enum-type-handler: org.apache.ibatis.type.EnumOrdinalTypeHandler
+
+feign:
+  httpclient:
+    enabled: true
+  okhttp:
+    enabled: false
+  sentinel:  # 开启feign对sentinel的支持
+    enabled: false 
+
+# 安全配置
+security:
+  # 允许无需认证的路径列表
+  whitelist-paths:
+    # 获取系统用户的认证信息用于账号密码判读
+    - /api/v1/users/{username}/authInfo
+
+# springdoc-openapi项目配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: 
+        - com.youlai.system.controller
+        - com.youlai.common.file.controller
+  # Api文档信息
+  info:
+    title: 系统服务
+    version: 3.0.0
+    description: 用户、部门、角色、菜单、字典等接口
+    contact:
+      name: youlai
+      url: https://www.youlai.tech
+      email: youlaitech@163.com
+    license:
+      name: Apache 2.0
+      url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+# knife4j的增强配置，不需要增强可以不配
+knife4j:
+  enable: false
+  setting:
+    language: zh_cn
+
+
+
+# 文件存储
+oss:
+  # OSS 类型 (目前支持aliyun、minio)
+  type: aliyun
+  # MinIO 对象存储服务
+  minio:
+    # 服务Endpoint
+    endpoint: http://localhost:9001
+    # 访问凭据
+    access-key: minioadmin
+    # 凭据密钥
+    secret-key: minioadmin
+    # 存储桶名称
+    bucket-name: default
+    # (可选)自定义域名，如果配置了域名，生成的文件URL是域名格式，未配置则URL则是IP格式 (eg: https://oss.youlai.tech)
+    custom-domain:
+  # 阿里云OSS对象存储服务
+  aliyun:
+    # 服务Endpoint
+    endpoint: oss-cn-hangzhou.aliyuncs.com
+    # 访问凭据
+    access-key-id: your-access-key-id
+    # 凭据密钥
+    access-key-secret: your-access-key-secret
+    # 存储桶名称
+    bucket-name: default

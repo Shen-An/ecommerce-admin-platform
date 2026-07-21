@@ -1,0 +1,53 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+.project
+.classpath
+.settings/
+
+# Build
+**/target/
+**/dist/
+**/node_modules/
+**/.pnpm-store/
+*.log
+logs/
+out/
+gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env & secrets
+.env
+.env.local
+**/application-local.yml
+**/bootstrap-local.yml
+**/secrets/
+
+# Docker data volumes
+docker/mysql/data/
+docker/redis/data/
+docker/nacos/logs/
+docker/minio/data/
+docker/minio/config/
+services/lightrag/rag_storage/
+services/lightrag/inputs/
+
+# Backend nested ignore leftovers
+backend/**/data/
+backend/docs/docker/minio/config/
+
+# Frontend
+admin/dist/
+admin/.env.local
+
+# Misc
+*.vsix
+h2.mv.db
+**/meta.dat
+work/
+derby.log

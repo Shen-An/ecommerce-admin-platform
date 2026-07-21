@@ -1,0 +1,48 @@
+server:
+  port: 8802
+
+# 本地无 RabbitMQ：关闭库存 MQ 监听
+app:
+  rabbitmq:
+    enabled: false
+
+spring:
+  main:
+    allow-circular-references: true
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+  cloud:
+    nacos:
+      # 注册中心
+      discovery:
+        server-addr: http://localhost:8848
+      # 配置中心
+      config:
+        # 本地启动
+        ## server-addr: ${spring.cloud.nacos.discovery.server-addr}
+        # 极速启动
+        server-addr: http://localhost:8848
+        file-extension: yaml
+        shared-configs[0]:
+          data-id: youlai-common.yaml
+          refresh: true
+  # 本地兜底（Nacos mall-pms.yaml 未加载时仍可起）
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/mall_pms?zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&autoReconnect=true
+    username: root
+    password: 123456
+  data:
+    redis:
+      database: 0
+      host: localhost
+      port: 6379
+      password: null
+
+
+

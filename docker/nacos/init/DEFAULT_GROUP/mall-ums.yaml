@@ -1,0 +1,90 @@
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${mysql.host}:${mysql.port}/mall_ums?zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&autoReconnect=true
+    username: ${mysql.username}
+    password: ${mysql.password}
+  data:
+    redis:
+      database: ${redis.database}
+      host: ${redis.host}
+      port: ${redis.port}
+      password: ${redis.password}
+      lettuce:
+        pool:
+          min-idle: 1
+
+mybatis-plus:
+  configuration:
+    # 驼峰下划线转换
+    map-underscore-to-camel-case: true
+    # 这个配置会将执行的sql打印出来，在开发或测试的时候可以用
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Seata 配置
+seata: 
+  # 开启 Seata
+  enabled: true
+  # 事务分组名称
+  tx-service-group: default_tx_group
+  service:
+    # 事务分组映射，根据分组名称匹配到集群
+    vgroup-mapping:
+      # 事务分组名称：集群名称
+      default_tx_group: default
+  registry:
+    type: nacos
+    nacos:
+      application: seata-server
+      server-addr: ${nacos.server-addr}
+      namespace:
+      group: SEATA_GROUP 
+
+# Feign 配置
+feign:
+  httpclient:
+    enabled: true
+  okhttp:
+    enabled: false
+  sentinel:  # 开启feign对sentinel的支持
+    enabled: false
+
+# 安全配置
+security:
+  # 白名单路径
+  whitelist-paths:
+      - /app-api/v1/members/openid/{openid}
+      - /app-api/v1/members/mobile/{mobile}
+      - /app-api/v1/members
+
+# springdoc-openapi项目配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.youlai.mall.ums.controller
+  # Api文档信息
+  info:
+    title: 会员服务
+    version: 3.0.0
+    description: 会员、地址等接口
+    contact:
+      name: youlai
+      url: https://www.youlai.tech
+      email: youlaitech@163.com
+    license:
+      name: Apache 2.0
+      url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+# knife4j的增强配置，不需要增强可以不配
+knife4j:
+  enable: false
+  setting:
+    language: zh_cn

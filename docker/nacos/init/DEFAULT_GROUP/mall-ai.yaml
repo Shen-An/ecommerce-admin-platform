@@ -1,0 +1,69 @@
+spring:
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${mysql.host}:${mysql.port}/mall_ai?zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&autoReconnect=true
+    username: ${mysql.username}
+    password: ${mysql.password}
+  data:
+    redis:
+      database: ${redis.database}
+      host: ${redis.host}
+      port: ${redis.port}
+      # 无默认空串：避免 Redisson 对无密码 Redis 发 AUTH
+      password: ${redis.password}
+      lettuce:
+        pool:
+          min-idle: 1
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+feign:
+  httpclient:
+    enabled: true
+  okhttp:
+    enabled: false
+  sentinel:
+    enabled: false
+
+ai:
+  lightrag:
+    base-url: http://localhost:9621
+    timeout-ms: 60000
+  llm:
+    provider: dashscope
+    # 无 API Key 时保持 true，助手走规则/Mock
+    mock-enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.youlai.mall.ai.controller
+  info:
+    title: AI 服务
+    version: 0.1.0
+    description: 运营助手、LightRAG 知识库、工单 Agent、数据洞察
+    contact:
+      name: ecommerce-admin-platform
+    license:
+      name: Apache 2.0
+      url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+security:
+  whitelist-path:
+    - /api/v1/ai/health

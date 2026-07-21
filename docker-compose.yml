@@ -1,0 +1,131 @@
+# 电商管理平台本地中间件
+# 启动：docker compose up -d
+# 访问：Nacos http://localhost:8848/nacos (nacos/nacos)
+#       MinIO  http://localhost:9090 (minioadmin/minioadmin)
+#       Redis  localhost:6379 / 123456
+#       MySQL  localhost:3306 root/123456
+
+name: ecommerce-admin-platform
+
+networks:
+  mall:
+    driver: bridge
+
+services:
+  mysql:
+    image: mysql:8.0.36
+    container_name: eap-mysql
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_ROOT_HOST: "%"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --lower_case_table_names=1
+    volumes:
+      - ./docker/mysql/data:/var/lib/mysql
+      - ./docker/mysql/conf/my.cnf:/etc/my.cnf:ro
+      - ./backend/docs/sql/mysql8:/docker-entrypoint-initdb.d:ro
+      - ./docker/mysql/init-ai.sql:/docker-entrypoint-initdb.d/zz_mall_ai.sql:ro
+    ports:
+      - "3306:3306"
+    networks:
+      - mall
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.2.3
+    container_name: eap-redis
+    restart: unless-stopped
+    command: redis-server /etc/redis/redis.conf --requirepass 123456 --appendonly no
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./docker/redis/data:/data
+      - ./docker/redis/config/redis.conf:/etc/redis/redis.conf:ro
+    ports:
+      - "6379:6379"
+    networks:
+      - mall
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nacos:
+    image: nacos/nacos-server:v2.2.3
+    container_name: eap-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: nacos_config
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: "123456"
+      MYSQL_SERVICE_DB_PARAM: characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      NACOS_AUTH_ENABLE: "false"
+    volumes:
+      - ./docker/nacos/logs:/home/nacos/logs
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    networks:
+      - mall
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8848/nacos/"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2024-04-18T19-09-19Z
+    container_name: eap-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9090"
+    environment:
+      TZ: Asia/Shanghai
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - ./docker/minio/data:/data
+    ports:
+      - "9001:9000"
+      - "9090:9090"
+    networks:
+      - mall
+
+  # LightRAG Server（可选，Phase 2 启用）
+  # 需要配置 LLM API Key 后取消注释
+  # lightrag:
+  #   image: ghcr.io/hkuds/lightrag:latest
+  #   container_name: eap-lightrag
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     TZ: Asia/Shanghai
+  #     HOST: 0.0.0.0
+  #     PORT: 9621
+  #   volumes:
+  #     - ./services/lightrag/rag_storage:/app/rag_storage
+  #     - ./services/lightrag/inputs:/app/inputs
+  #   ports:
+  #     - "9621:9621"
+  #   networks:
+  #     - mall

@@ -1,0 +1,108 @@
+spring:
+  data:
+    redis:
+      timeout: PT30S
+      database: ${redis.database}
+      host: ${redis.host}
+      port: ${redis.port}
+      password: ${redis.password}
+      lettuce:
+        pool:
+          # 连接池最小空闲连接数
+          min-idle: 1
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true # 启用服务发现
+          lower-case-service-id: true
+      default-filters:
+        # 令牌中继
+        - TokenRelay= 
+      routes:
+        - id: 认证中心
+          uri: lb://youlai-auth
+          predicates:
+            - Path=/youlai-auth/**
+          filters:
+            - StripPrefix=1            
+        - id: 系统服务
+          uri: lb://youlai-system
+          predicates:
+            - Path=/youlai-system/**
+          filters:
+            - StripPrefix=1
+        - id: AI服务
+          uri: lb://mall-ai
+          predicates:
+            - Path=/mall-ai/**
+          filters:
+            - StripPrefix=1
+        - id: 商品服务
+          uri: lb://mall-pms
+          predicates:
+            - Path=/mall-pms/**
+          filters:
+            - StripPrefix=1
+        - id: 订单服务
+          uri: lb://mall-oms
+          predicates:
+            - Path=/mall-oms/**
+          filters:
+            - StripPrefix=1
+        - id: 营销服务
+          uri: lb://mall-sms
+          predicates:
+            - Path=/mall-sms/**
+          filters:
+            - StripPrefix=1
+        - id: 会员服务
+          uri: lb://mall-ums
+          predicates:
+            - Path=/mall-ums/**
+          filters:
+            - StripPrefix=1
+      globalcors:
+        corsConfigurations:
+          '[/**]': # 对所有路由应用CORS配置
+            # 允许所有域名的请求
+            allowedOriginPatterns: "*"
+            # 允许所有请求方法，如GET、POST、PUT、DELETE等
+            allowedMethods: "*"
+             # 允许所有请求头
+            allowedHeaders: "*" 
+            # 允许凭证，如Cookies和HTTP认证
+            allowCredentials: true   
+            maxAge: 3600
+# Feign 配置
+feign:
+  httpclient:
+    enabled: true
+  okhttp:
+    enabled: false
+  sentinel:  # 开启feign对sentinel的支持
+    enabled: false 
+
+
+# 安全配置
+security:
+  # 访问黑名单
+  blacklist-paths:
+      # 获取用户认证信息
+      - /youlai-system/api/v1/users/{username}/authInfo
+
+# knife4j 网关聚合  
+# https://doc.xiaominfo.com/docs/middleware-sources/spring-cloud-gateway/spring-gateway-introduction
+knife4j:
+  gateway:
+    enabled: true
+    # 指定服务发现的模式聚合微服务文档，并且是默认`default`分组
+    strategy: discover
+    discover:
+      enabled: true
+      # 聚合所有子服务(swagger2规范)，子服务是3规范则替换为openapi3
+      version: openapi3
+      # 需要排除的微服务(eg:网关服务) 
+      excluded-services:
+          - youlai-gateway
+

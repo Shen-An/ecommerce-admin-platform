@@ -1,0 +1,73 @@
+server:
+  port: 8805
+
+spring:
+  main:
+    allow-circular-references: true
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  cloud:
+    nacos:
+      discovery:
+        server-addr: http://localhost:8848
+      config:
+        server-addr: http://localhost:8848
+        file-extension: yaml
+        shared-configs[0]:
+          data-id: youlai-common.yaml
+          refresh: true
+
+# 本地兜底配置（Nacos 未导入 mall-ai.yaml 时仍可启动）
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/mall_ai?zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&autoReconnect=true
+    username: root
+    password: 123456
+  data:
+    redis:
+      database: 0
+      host: localhost
+      port: 6379
+      # 本机 Redis 无密码：null 而非空串，避免 Redisson AUTH
+      password: null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+ai:
+  lightrag:
+    base-url: ${LIGHTRAG_BASE_URL:http://localhost:9621}
+    timeout-ms: 60000
+  llm:
+    provider: dashscope
+    mock-enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.youlai.mall.ai.controller
+  info:
+    title: AI 服务
+    version: 0.1.0
+    description: 运营助手 / 知识库 / 工单 Agent / 数据洞察
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+security:
+  whitelist-path:
+    - /api/v1/ai/health

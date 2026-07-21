@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="youlai-mall 管理端，基于 vue3-element-admin 模板开发"
+    />
+    <meta
+      name="keywords"
+      content="vue,element-plus,typescript,vue-element-admin,vue3-element-admin"
+    />
+    <title>mall-admin</title>
+  </head>
+
+  <body>
+    <div id="app">
+      <div class="loader"></div>
+    </div>
+  </body>
+  <script type="module" src="/src/main.ts"></script>
+
+  <style>
+    html,
+    body,
+    #app {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .loader {
+      position: relative;
+      width: 50px;
+      aspect-ratio: 1.154;
+      background: conic-gradient(
+        from 120deg at 50% 64%,
+        #0000,
+        #25b09b 1deg 120deg,
+        #0000 121deg
+      );
+      animation: l27-0 1.5s infinite cubic-bezier(0.3, 1, 0, 1);
+    }
+
+    .loader::before,
+    .loader::after {
+      position: absolute;
+      inset: 0;
+      content: "";
+      background: inherit;
+      transform-origin: 50% 66%;
+      animation: l27-1 1.5s infinite;
+    }
+
+    .loader::after {
+      --s: -1;
+    }
+
+    @keyframes l27-0 {
+      0%,
+      30% {
+        transform: rotate(0);
+      }
+
+      70% {
+        transform: rotate(120deg);
+      }
+
+      70.01%,
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes l27-1 {
+      0% {
+        transform: rotate(calc(var(--s, 1) * 120deg)) translate(0);
+      }
+
+      30%,
+      70% {
+        transform: rotate(calc(var(--s, 1) * 120deg))
+          translate(calc(var(--s, 1) * -5px), 10px);
+      }
+
+      100% {
+        transform: rotate(calc(var(--s, 1) * 120deg)) translate(0);
+      }
+    }
+  </style>
+</html>
