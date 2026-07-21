@@ -54,7 +54,7 @@ com.youlai.mall.ai
 | 组件 | 地址 | 账号 |
 |------|------|------|
 | MySQL | localhost:3306 | root / 123456 |
-| Redis | localhost:6379 | 密码 123456 |
+| Redis | localhost:6379 | **无密码** |
 | Nacos | localhost:8848/nacos | nacos / nacos |
 | MinIO | localhost:9090 | minioadmin / minioadmin |
 | LightRAG | localhost:9621 | Phase2 启用 |

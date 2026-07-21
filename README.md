@@ -60,17 +60,21 @@ bash scripts/import-nacos-config.sh
 # 另需导入原厂 zip 中其它服务配置（auth/system/pms...），见 local-setup
 ```
 
-### 3. 启动后端核心服务
+### 3. 启动后端（推荐一键）
 
-```bash
-cd backend
-mvn -pl youlai-common,youlai-gateway,youlai-auth,youlai-system,mall-ai -am -DskipTests package
+**前置**：MySQL / Redis / Nacos 已启动，Nacos 配置已导入（见 [docs/local-setup.md](docs/local-setup.md)）。
+
+```bat
+scripts\start-backend.bat
 ```
 
-IDEA 启动顺序：Gateway → Auth → System → **AiApplication(8805)** →（可选）PMS/OMS。
+或 IDEA 运行 `PlatformLauncher`（建议参数 `--build`）。默认拉起：
+
+gateway(9999) · auth(9000) · system(8800) · ai(8805) · pms(8802) · ums(8801) · oms(8803) · sms(8804)
 
 - 文档：`http://localhost:9999/doc.html`
 - AI 健康检查：`http://localhost:8805/api/v1/ai/health`
+- 验证码：`http://localhost:9999/youlai-auth/api/v1/auth/captcha`
 
 ### 4. 启动管理前端
 
@@ -89,19 +93,23 @@ Chat LLM 用国内 API；**Embedding 接英伟达**。说明见 [services/lightr
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| Phase 0 | 底座 + Docker + mall-ai 骨架 | ✅ 进行中 |
-| Phase 1 | 运营助手 + Tool + 会话 | ⏳ |
+| Phase 0 | 底座 + 一键启动 + 管理端业务页 + AI 骨架/模型配置 | ✅ 完成 |
+| Phase 1 | 运营助手 + Tool + 会话 | ⏳ 规划中，见 [docs/phase1.md](docs/phase1.md) |
 | Phase 2 | LightRAG 知识库 | ⏳ |
 | Phase 3 | 工单多 Agent | ⏳ |
 | Phase 4 | 数据洞察 + 打磨 | ⏳ |
 
-当前 `POST /api/v1/ai/assistant/chat` 已提供**规则路由 Mock**，便于前后端联调；接入 DashScope 后关闭 `ai.llm.mock-enabled`。
+当前 `POST /api/v1/ai/assistant/chat` 为**规则路由 Mock**；Phase 1 将接 Tool + 会话落库 + 可选真实 LLM。
 
 ## 文档
 
-- [架构说明](docs/architecture.md)
-- [AI 设计](docs/ai-design.md)
-- [演示脚本](docs/demo-script.md)
+| 文档 | 说明 |
+|------|------|
+| [docs/local-setup.md](docs/local-setup.md) | 本机中间件与一键启动 |
+| [docs/architecture.md](docs/architecture.md) | 架构总览 |
+| [docs/ai-design.md](docs/ai-design.md) | AI 四场景设计 |
+| [docs/phase1.md](docs/phase1.md) | **Phase 1 任务与验收** |
+| [docs/demo-script.md](docs/demo-script.md) | 演示话术 |
 
 ## 许可证
 
