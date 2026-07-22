@@ -31,10 +31,16 @@
 
 ## 演示
 
-1. AI中心 → **数据洞察**
-2. 快捷语：**「近 7 天商品销量 Top5」** → bar 图 + 解读
-3. **「订单状态分布怎么样」** → pie 图
-4. 强调页面标签 **whitelist · 无 SQL 注入**
+1. AI中心 → **数据洞察**（标签 **白名单 · 无 SQL 注入**）
+2. 建议顺序（均有前端快捷语）：
+   - **「近 7 天商品销量 Top5」** → `sales_topn` bar
+   - **「品类销量分布」** → `category_sales`
+   - **「GMV 成交额快照」** → `gmv_snapshot`
+   - **「订单状态分布怎么样」** → `order_status_dist` pie
+   - **「库存预警有哪些商品」** → `low_stock`
+   - **「取消和售后占比如何」** → `refund_rate`
+   - **「今天运营综合看板」** → `ops_dashboard`
+3. 口播：Planner 只映射白名单 code → Feign 只读 → ECharts option + narrative
 
 ## 代码
 
